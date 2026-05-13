@@ -70,6 +70,8 @@ export type ClawAegisPluginConfig = {
   toolCallEnforcementEnabled: boolean;
   dispatchGuardEnabled: boolean;
   dispatchGuardMode: DefenseMode;
+  webUiEnabled: boolean;
+  webUiPort: number;
   protectedPaths: string[];
   protectedSkills: string[];
   protectedPlugins: string[];
@@ -117,6 +119,11 @@ export const clawAegisPluginConfigSchema = {
     toolCallEnforcementEnabled: defaultEnabledBooleanSchema,
     dispatchGuardEnabled: defaultEnabledBooleanSchema,
     dispatchGuardMode: defaultDefenseModeSchema,
+    webUiEnabled: defaultEnabledBooleanSchema,
+    webUiPort: {
+      type: "number",
+      default: 3800,
+    },
     protectedPaths: {
       type: "array",
       items: { type: "string" },
@@ -391,8 +398,11 @@ function readDefenseMode(
   return isDefenseMode(explicitMode) ? explicitMode : params.defaultMode;
 }
 
-export function resolveClawAegisPluginConfig(api: OpenClawPluginApi): ClawAegisPluginConfig {
-  const raw = (api.pluginConfig ?? {}) as Record<string, unknown>;
+export function resolveClawAegisPluginConfig(params: {
+  pluginConfig?: Record<string, unknown>;
+  resolvePath: (input: string) => string;
+}): ClawAegisPluginConfig {
+  const raw = (params.pluginConfig ?? {}) as Record<string, unknown>;
   const allDefensesEnabled = raw.allDefensesEnabled !== false;
   const defaultBlockingMode = isDefenseMode(raw.defaultBlockingMode)
     ? raw.defaultBlockingMode
@@ -470,13 +480,22 @@ export function resolveClawAegisPluginConfig(api: OpenClawPluginApi): ClawAegisP
     toolCallEnforcementEnabled: readEnabledFlag(raw, "toolCallEnforcementEnabled", allDefensesEnabled),
     dispatchGuardEnabled: dispatchGuardMode !== "off",
     dispatchGuardMode,
-    protectedPaths: normalizeStringList(raw.protectedPaths, api.resolvePath),
+    webUiEnabled: raw.webUiEnabled !== false,
+    webUiPort: typeof raw.webUiPort === "number" ? raw.webUiPort : 3800,
+    protectedPaths: normalizeStringList(raw.protectedPaths, params.resolvePath),
     protectedSkills: normalizeIdentifierList(raw.protectedSkills),
     protectedPlugins: normalizeIdentifierList(raw.protectedPlugins),
-    skillRoots: normalizeStringList(raw.skillRoots, api.resolvePath),
-    extraProtectedRoots: normalizeStringList(raw.extraProtectedRoots, api.resolvePath),
+    skillRoots: normalizeStringList(raw.skillRoots, params.resolvePath),
+    extraProtectedRoots: normalizeStringList(raw.extraProtectedRoots, params.resolvePath),
     startupSkillScan: raw.startupSkillScan !== false,
   };
+}
+
+export function resolveClawAegisPluginConfigFromApi(api: OpenClawPluginApi): ClawAegisPluginConfig {
+  return resolveClawAegisPluginConfig({
+    pluginConfig: api.pluginConfig as Record<string, unknown>,
+    resolvePath: (p) => api.resolvePath(p),
+  });
 }
 
 export function resolveClawAegisStateDir(api: OpenClawPluginApi): string {

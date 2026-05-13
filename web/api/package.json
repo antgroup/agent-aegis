@@ -14,13 +14,15 @@
     "cors": "^2.8.5",
     "ws": "^8.18.0",
     "chokidar": "^4.0.0",
-    "zod": "^3.24.0"
+    "zod": "^3.24.0",
+    "js-yaml": "^4.1.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/cors": "^2.8.17",
     "@types/ws": "^8.5.13",
     "@types/node": "^22.0.0",
+    "@types/js-yaml": "^4.0.9",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }

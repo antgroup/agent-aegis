@@ -8,56 +8,11 @@
  * engine that OpenClaw uses natively.
  */
 
-import { createHash } from "node:crypto";
-import { promises as fs } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 
-import type { ClawAegisPluginConfig, DefenseMode } from "./src/config.js";
-import {
-  CLAW_AEGIS_PLUGIN_ID,
-  DEFENSE_EVENTS_FILENAME,
-  SKILL_SCAN_EVENTS_FILENAME,
-  STARTUP_SCAN_BUDGET_MS,
-} from "./src/config.js";
-import {
-  buildDynamicPromptContext,
-  buildLoopGuardStableArgsKey,
-  buildStaticSystemContext,
-  collectScriptArtifactRecords,
-  collectSensitiveOutputValues,
-  collectToolResultScanText,
-  detectCommandObfuscationViolation,
-  detectHighRiskCommand,
-  detectUserRiskFlags,
-  isOutboundToolCall,
-  normalizeToolName,
-  normalizeToolParamsForGuard,
-  resolveInlineExecutionViolation,
-  resolveMemoryGuardViolation,
-  resolveOutsideWorkspaceDeletionViolation,
-  resolveProtectedPathCandidates,
-  resolveProtectedPathViolation,
-  resolveScriptProvenanceViolation,
-  resolveSelfProtectionTextViolation,
-  reviewSuspiciousOutboundChain,
-  sanitizeAssistantMessage,
-  sanitizeSensitiveOutputText,
-  scanToolResultText,
-} from "./src/rules.js";
-import {
-  TOOL_CALL_DEFENSE_STRATEGIES,
-  type ToolCallDefenseContext,
-  type ToolCallDefenseEvaluation,
-  type ToolCallDefenseModeSource,
-  type ToolCallDefenseModes,
-  type ToolCallDefenseStrategy,
-} from "./src/security-strategies.js";
-import { SkillScanService } from "./src/scan-service.js";
-import { ClawAegisState } from "./src/state.js";
-import type { AegisLogger } from "./src/types.js";
-
-// Define AgentMessage locally since it's not exported from types.ts
-type AgentMessage = Record<string, unknown>;
+import { type ClawAegisPluginConfig } from "./src/config.js";
+import { AegisDefenseEngine } from "./src/engine.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,38 +37,15 @@ type CheckBeforeToolParams = {
   runId?: string;
 };
 
-type CheckBeforeToolResult = {
-  block: boolean;
-  mode: DefenseMode;
-  defense?: string;
-  reason?: string;
-  severity?: string;
-  details?: Record<string, unknown>;
-};
-
 // ---------------------------------------------------------------------------
-// Runtime (agent-agnostic)
+// Runtime (delegates to AegisDefenseEngine)
 // ---------------------------------------------------------------------------
 
 export class AegisRpcRuntime {
-  private config!: ClawAegisPluginConfig;
-  private state!: ClawAegisState;
-  private scanService!: SkillScanService;
-  private logger: AegisLogger;
-  private stateDir!: string;
-  private pluginRootDir!: string;
-  private staticSystemContext: string | undefined;
+  private engine!: AegisDefenseEngine;
   private initialized = false;
-  private defenseEventWriter!: (event: Record<string, unknown>) => void;
 
-  constructor() {
-    this.logger = {
-      debug: (msg, meta) => console.error(`[aegis:debug] ${msg}`, meta ? JSON.stringify(meta) : ""),
-      info: (msg, meta) => console.error(`[aegis:info] ${msg}`, meta ? JSON.stringify(meta) : ""),
-      warn: (msg, meta) => console.error(`[aegis:warn] ${msg}`, meta ? JSON.stringify(meta) : ""),
-      error: (msg, meta) => console.error(`[aegis:error] ${msg}`, meta ? JSON.stringify(meta) : ""),
-    };
-  }
+  constructor() {}
 
   // -----------------------------------------------------------------------
   // init
@@ -126,268 +58,84 @@ export class AegisRpcRuntime {
     skillRoots?: string[];
     protectedRoots?: string[];
   }): Promise<{ ok: true }> {
-    this.stateDir = params.stateDir;
-    this.pluginRootDir = params.pluginRootDir;
-    this.config = this.resolveConfig(params.config);
-    this.state = new ClawAegisState({
-      stateDir: this.stateDir,
-      logger: this.logger,
+    // Create a mock API object for the engine
+    const mockApi = {
+      rootDir: params.pluginRootDir,
+      pluginConfig: params.config,
+      logger: {
+        debug: (msg: string, meta?: any) => console.error(`[aegis:rpc:debug] ${msg} ${meta ? JSON.stringify(meta) : ""}`),
+        info: (msg: string, meta?: any) => console.error(`[aegis:rpc:info] ${msg} ${meta ? JSON.stringify(meta) : ""}`),
+        warn: (msg: string, meta?: any) => console.error(`[aegis:rpc:warn] ${msg} ${meta ? JSON.stringify(meta) : ""}`),
+        error: (msg: string, meta?: any) => console.error(`[aegis:rpc:error] ${msg} ${meta ? JSON.stringify(meta) : ""}`),
+      },
+      runtime: {
+        state: {
+          resolveStateDir: () => params.stateDir,
+        },
+      },
+      // Hermes-specific path resolution: expand ~ and resolve relative to plugin root
+      resolvePath: (p: string) => {
+        if (p.startsWith("~")) {
+          return p.replace(/^~/, os.homedir());
+        }
+        return path.resolve(params.pluginRootDir, p);
+      },
+    };
+
+    this.engine = new AegisDefenseEngine(mockApi as any, {
+        stateDir: params.stateDir,
+        skillScanRoots: params.skillRoots,
     });
+    await this.engine.start();
 
-    await fs.mkdir(this.stateDir, { recursive: true });
-    await this.state.loadPersistentState();
-
-    if (params.protectedRoots) {
-      this.state.setProtectedRoots(params.protectedRoots);
-    }
-
-    this.staticSystemContext = this.config.promptGuardEnabled
-      ? buildStaticSystemContext({
-          selfProtectionEnabled: this.config.selfProtectionEnabled,
-          toolCallEnforcementEnabled: this.config.toolCallEnforcementEnabled,
-          protectedPaths: this.config.protectedPaths,
-        })
-      : undefined;
-
-    const emitSkillScanEvent = this.createEventWriter(
-      path.join(this.stateDir, SKILL_SCAN_EVENTS_FILENAME),
-    );
-    this.defenseEventWriter = this.createEventWriter(
-      path.join(this.stateDir, DEFENSE_EVENTS_FILENAME),
-    );
-    this.scanService = new SkillScanService({
-      state: this.state,
-      logger: this.logger,
-      onScanComplete: emitSkillScanEvent,
-    });
-
-    if (this.config.skillScanEnabled && this.config.startupSkillScan && params.skillRoots) {
-      const deadline = Date.now() + STARTUP_SCAN_BUDGET_MS;
-      for (const root of params.skillRoots) {
-        if (Date.now() >= deadline) break;
-        await this.scanService.scanRoots({ roots: [root], budgetMs: deadline - Date.now() }).catch(() => undefined);
-      }
+    // If Hermes provided extra roots, register them
+    if (params.protectedRoots && params.protectedRoots.length > 0) {
+      this.engine.state.setProtectedRoots([
+        ...this.engine.state.getProtectedRoots(),
+        ...params.protectedRoots,
+      ]);
     }
 
     this.initialized = true;
-    this.logger.info("claw-aegis RPC runtime initialized");
+    this.engine.logger.info("claw-aegis RPC runtime initialized");
     return { ok: true };
   }
 
   // -----------------------------------------------------------------------
-  // check_user_input
+  // API methods (delegating to unified engine)
   // -----------------------------------------------------------------------
 
   checkUserInput(params: {
     content: string;
     sessionKey?: string;
-  }): { riskFlags: string[]; context?: string } {
+  }): { riskFlags: string[] } {
     this.ensureInit();
-    if (!this.config.userRiskScanEnabled) {
-      return { riskFlags: [] };
-    }
-    const match = detectUserRiskFlags(params.content);
-    const flags = match?.flags ?? [];
-
-    if (flags.length > 0 && params.sessionKey) {
-      this.state.noteUserRisk(params.sessionKey, flags);
-
-      // Record defense event for Web UI
-      this.defenseEventWriter({
-        defense: "userRiskScan",
-        mode: "observe",
-        reason: `User risk flags detected: ${flags.join(", ")}`,
-        severity: flags.some((f) => f.includes("disable")) ? "high" : "medium",
-        blocked: false,
-        details: { flags },
-        userInput: params.content.slice(0, 200),
-      });
-    }
-
-    return { riskFlags: flags };
+    this.engine.checkUserInput(params.content, params.sessionKey);
+    const turnState = params.sessionKey ? this.engine.state.peekPromptState(params.sessionKey) : undefined;
+    return { riskFlags: turnState?.userRiskFlags ?? [] };
   }
 
-  // -----------------------------------------------------------------------
-  // get_prompt_guard
-  // -----------------------------------------------------------------------
-
-  getPromptGuard(params: {
+  async getPromptGuard(params: {
     sessionKey?: string;
-  }): { context: string | null } {
+  }): Promise<{ context: string | null }> {
     this.ensureInit();
-    if (!this.config.promptGuardEnabled) {
-      return { context: null };
-    }
-
-    const turnState = params.sessionKey
-      ? this.state.consumePromptState(params.sessionKey)
-      : undefined;
-
-    const dynamicContext = turnState
-      ? buildDynamicPromptContext(turnState)
-      : undefined;
-
-    const parts: string[] = [];
-    if (this.staticSystemContext) parts.push(this.staticSystemContext);
-    if (dynamicContext) parts.push(dynamicContext);
-
-    return { context: parts.length > 0 ? parts.join("\n\n") : null };
+    const context = await this.engine.buildPromptContext(undefined, params.sessionKey);
+    return { context: context ?? null };
   }
 
-  // -----------------------------------------------------------------------
-  // check_before_tool
-  // -----------------------------------------------------------------------
-
-  checkBeforeTool(params: CheckBeforeToolParams): CheckBeforeToolResult {
+  checkBeforeTool(params: CheckBeforeToolParams): { block: boolean; defense?: string; reason?: string; details?: any } {
     this.ensureInit();
-    const tool = normalizeToolName(params.tool);
-    const args = normalizeToolParamsForGuard(params.args);
-    const runId = params.runId ?? "unknown";
-    const sessionKey = params.sessionKey ?? "default";
-    const baseDir = process.cwd();
-
-    // Build defense modes (same as OpenClaw handlers.ts)
-    const toolCallModes: ToolCallDefenseModes = {
-      selfProtection: this.config.selfProtectionMode,
-      commandBlock: this.config.commandBlockMode,
-      encodingGuard: this.config.encodingGuardMode,
-      commandObfuscation: this.mergeDefenseModes(
-        this.config.commandBlockMode,
-        this.config.encodingGuardMode,
-      ),
-      scriptProvenanceGuard: this.config.scriptProvenanceGuardMode,
-      memoryGuard: this.config.memoryGuardMode,
-      loopGuard: this.config.loopGuardMode,
-      exfiltrationGuard: this.config.exfiltrationGuardMode,
-    };
-
-    // Check if any strategy is enabled
-    const hasAnyEnabledStrategy = TOOL_CALL_DEFENSE_STRATEGIES.some((strategy) =>
-      this.resolveToolCallDefenseMode(toolCallModes, strategy.modeSource) !== "off",
-    );
-    if (!hasAnyEnabledStrategy) {
-      return { block: false, mode: "off" };
+    const result = this.engine.checkToolCall(params.tool, params.args, params.runId, params.sessionKey);
+    if (result) {
+      return {
+        block: result.block,
+        defense: result.defense,
+        reason: result.reason,
+        details: {},
+      };
     }
-
-    const protectedRoots = this.config.selfProtectionMode !== "off"
-      ? this.state.getProtectedRoots()
-      : [];
-    const pathCandidates = resolveProtectedPathCandidates(tool, args, baseDir);
-    const previousToolCalls = runId ? this.state.peekRunToolCalls(runId) : [];
-    const observedSecrets = sessionKey ? this.state.peekObservedSecrets(sessionKey) : [];
-    const runSecurityState = runId ? this.state.peekRunSecurityState(runId) : undefined;
-    const promptSnapshot = sessionKey ? this.state.peekPromptSnapshot(sessionKey) : undefined;
-    const commandText = this.readCommandText(args);
-
-    // Build context (same structure as OpenClaw handlers.ts)
-    const toolCallContext: ToolCallDefenseContext = {
-      toolName: tool,
-      params: args,
-      commandText,
-      sessionKey,
-      runId,
-      baseDir,
-      protectedRoots,
-      pathCandidates,
-      previousToolCalls,
-      observedSecrets,
-      runSecurityState,
-      promptSnapshot,
-      protectedSkills: this.config.protectedSkills,
-      protectedPlugins: this.config.protectedPlugins,
-      now: () => Date.now(),
-      modes: toolCallModes,
-      helpers: {
-        resolveSelfProtectionTextViolation,
-        resolveOutsideWorkspaceDeletionViolation,
-        resolveProtectedPathViolation,
-        detectCommandObfuscationViolation,
-        detectHighRiskCommand,
-        resolveInlineExecutionViolation,
-        resolveMemoryGuardViolation,
-        resolveScriptProvenanceViolation,
-        reviewSuspiciousOutboundChain,
-        buildLoopGuardStableArgsKey,
-        isOutboundToolCall,
-      },
-      state: {
-        incrementLoopCounter: (sk, rid, key) =>
-          this.state.incrementLoopCounter(sk, rid, key),
-        noteRunSecuritySignals: (rid, payload) =>
-          this.state.noteRunSecuritySignals(rid, payload),
-        noteRuntimeRisk: (sk, flags) =>
-          this.state.noteRuntimeRisk(sk, flags),
-        noteRunToolCall: (rid, record) =>
-          this.state.noteRunToolCall(rid, record),
-      },
-    };
-
-    // Evaluate strategies (same loop as OpenClaw handlers.ts)
-    for (const strategy of TOOL_CALL_DEFENSE_STRATEGIES) {
-      if (!strategy.appliesTo(toolCallContext)) {
-        continue;
-      }
-
-      const evaluation: ToolCallDefenseEvaluation = strategy.evaluate(toolCallContext);
-
-      if (evaluation.result === "blocked") {
-        const mode = this.resolveToolCallDefenseMode(toolCallModes, strategy.modeSource);
-        this.emitDefenseEvent({
-          defense: strategy.id,
-          mode,
-          reason: evaluation.reason ?? "unknown",
-          severity: "high",
-          blocked: true,
-          details: evaluation.extra,
-        });
-        return {
-          block: true,
-          mode,
-          defense: strategy.id,
-          reason: evaluation.reason ?? "unknown",
-          severity: "high",
-          details: evaluation.extra ?? {},
-        };
-      }
-
-      if (evaluation.result === "observed") {
-        const mode = this.resolveToolCallDefenseMode(toolCallModes, strategy.modeSource);
-        this.emitDefenseEvent({
-          defense: strategy.id,
-          mode,
-          reason: evaluation.reason ?? "unknown",
-          severity: "medium",
-          blocked: false,
-          details: evaluation.extra,
-        });
-        // Continue checking — observe does not block
-        continue;
-      }
-    }
-
-    // --- track state for future checks ---
-    this.state.noteRunToolCall(runId, {
-      runId,
-      sessionKey,
-      toolName: tool,
-      params: args,
-      timestamp: Date.now(),
-    });
-
-    // track script artifacts from write_file/patch
-    if (["write_file", "patch", "write", "edit"].includes(tool)) {
-      const artifacts = collectScriptArtifactRecords(tool, args, { runId, sessionKey, timestamp: Date.now() });
-      if (artifacts.length > 0) {
-        this.state.noteRunScriptArtifacts(runId, { sessionKey, artifacts });
-      }
-    }
-
-    return { block: false, mode: "off" };
+    return { block: false };
   }
-
-  // -----------------------------------------------------------------------
-  // check_tool_result
-  // -----------------------------------------------------------------------
 
   checkToolResult(params: {
     tool: string;
@@ -397,103 +145,37 @@ export class AegisRpcRuntime {
     runId?: string;
   }): { riskFlags: string[]; suspicious: boolean } {
     this.ensureInit();
-    if (!this.config.toolResultScanEnabled) {
-      return { riskFlags: [], suspicious: false };
-    }
-
-    const message: AgentMessage = { content: params.result };
-    const textResult = collectToolResultScanText(message);
-    const text = typeof textResult === 'string' ? textResult : textResult.text || '';
-    const outcome = scanToolResultText(text, textResult.oversize || false);
-    const sessionKey = params.sessionKey ?? "default";
-
-    if (outcome.riskFlags.length > 0 || outcome.suspicious) {
-      this.state.noteToolResult(sessionKey, outcome);
-
-      // Track encoded risk flags as runtime risks (matches OpenClaw behavior)
-      const encodedRiskFlags = outcome.riskFlags.filter((flag: string) => flag.startsWith("encoded-"));
-      if (encodedRiskFlags.length > 0) {
-        this.state.noteRuntimeRisk(sessionKey, encodedRiskFlags);
-      }
-
-      // Emit defense event for Web UI (matches OpenClaw behavior)
-      this.emitDefenseEvent({
-        defense: "tool_result_scan",
-        mode: "observe",
-        reason: `风险标记: ${outcome.riskFlags.join(", ") || "suspicious"}`,
-        severity: "medium",
-        blocked: false,
-        details: { flags: outcome.riskFlags, suspicious: outcome.suspicious, tool: params.tool },
-      });
-    }
-
-    // track source signals for exfiltration detection
-    if (params.runId) {
-      const runState = this.state.peekRunSecurityState(params.runId);
-      if (!runState) {
-        this.state.noteRunSecuritySignals(params.runId, {
-          sessionKey,
-          sourceSignals: outcome.riskFlags,
-        });
-      }
-    }
-
-    // collect secrets for redaction tracking
-    if (this.config.outputRedactionEnabled) {
-      const secrets = collectSensitiveOutputValues(params.result);
-      if (secrets.length > 0) {
-        this.state.noteObservedSecrets(sessionKey, secrets);
-        if (params.runId) {
-          const fingerprints = secrets
-            .filter((s) => s.length >= 8)
-            .map((s) => ({
-              hash: createHash("sha256").update(s).digest("hex"),
-              length: s.length,
-              source: params.tool,
-              updatedAt: Date.now(),
-            }));
-          if (fingerprints.length > 0) {
-            this.state.noteRunSecretFingerprints(params.runId, {
-              sessionKey,
-              fingerprints,
-            });
-          }
-        }
-      }
-    }
-
+    const message = { role: "toolResult", toolName: params.tool, content: params.result };
+    this.engine.scanToolResult(message, params.sessionKey);
+    
+    const turnState = params.sessionKey ? this.engine.state.peekPromptState(params.sessionKey) : undefined;
     return {
-      riskFlags: outcome.riskFlags,
-      suspicious: outcome.suspicious,
+      riskFlags: turnState?.toolResultRiskFlags ?? [],
+      suspicious: turnState?.toolResultSuspicious ?? false,
     };
   }
 
-  // -----------------------------------------------------------------------
-  // redact_output
-  // -----------------------------------------------------------------------
+  checkLlmOutput(params: {
+    texts: string[];
+    model: string;
+    provider: string;
+  }): { ok: true } {
+    this.ensureInit();
+    this.engine.handleLlmOutput(params.texts, params.model, params.provider);
+    return { ok: true };
+  }
 
   redactOutput(params: {
     text: string;
     sessionKey?: string;
   }): { text: string; redacted: boolean } {
     this.ensureInit();
-    if (!this.config.outputRedactionEnabled) {
-      return { text: params.text, redacted: false };
+    const result = this.engine.redactAssistantMessage({ role: "assistant", content: params.text }, params.sessionKey);
+    if (result) {
+        return { text: result.message.content as string, redacted: result.changed };
     }
-
-    const sessionKey = params.sessionKey ?? "default";
-    const secrets = this.state.peekObservedSecrets(sessionKey);
-    const options = secrets.length > 0 ? { observedSecrets: secrets } : {};
-    const outcome = sanitizeSensitiveOutputText(params.text, options);
-    return {
-      text: outcome.value,
-      redacted: outcome.changed,
-    };
+    return { text: params.text, redacted: false };
   }
-
-  // -----------------------------------------------------------------------
-  // update_state
-  // -----------------------------------------------------------------------
 
   updateState(params: {
     method: string;
@@ -507,50 +189,27 @@ export class AegisRpcRuntime {
 
     switch (params.method) {
       case "clear_session":
-        this.state.clearSessionRuntimeState(sessionKey);
+        this.engine.state.clearSessionRuntimeState(sessionKey);
         break;
       case "clear_run":
-        this.state.clearRunToolCalls(runId);
-        this.state.clearRunSecurityState(runId);
+        this.engine.state.clearRunToolCalls(runId);
+        this.engine.state.clearRunSecurityState(runId);
         break;
       case "note_user_input":
         if (typeof params.data?.content === "string") {
-          this.state.noteLastUserInput(sessionKey, params.data.content);
+          this.engine.state.noteLastUserInput(sessionKey, params.data.content);
         }
         break;
-      default:
-        break;
     }
-
     return { ok: true };
   }
 
-  // -----------------------------------------------------------------------
-  // get_config
-  // -----------------------------------------------------------------------
-
-  getConfig(): ClawAegisPluginConfig {
-    this.ensureInit();
-    return { ...this.config };
-  }
-
-  // -----------------------------------------------------------------------
-  // scan_skills
-  // -----------------------------------------------------------------------
-
   async scanSkills(params: { roots: string[] }): Promise<{ scanned: number }> {
     this.ensureInit();
-    if (!this.config.skillScanEnabled) {
-      return { scanned: 0 };
-    }
-    await this.scanService.scanRoots({ roots: params.roots }).catch(() => undefined);
-    await this.state.persistTrustedSkills().catch(() => undefined);
+    await this.engine.scanService.scanRoots({ roots: params.roots });
+    await this.engine.state.persistTrustedSkills();
     return { scanned: params.roots.length };
   }
-
-  // -----------------------------------------------------------------------
-  // dispatch
-  // -----------------------------------------------------------------------
 
   async dispatch(request: RpcRequest): Promise<RpcResponse> {
     const { id, method, params = {} } = request;
@@ -558,31 +217,34 @@ export class AegisRpcRuntime {
       let result: unknown;
       switch (method) {
         case "init":
-          result = await this.init(params as Parameters<typeof this.init>[0]);
+          result = await this.init(params as any);
           break;
         case "check_user_input":
-          result = this.checkUserInput(params as Parameters<typeof this.checkUserInput>[0]);
+          result = this.checkUserInput(params as any);
           break;
         case "get_prompt_guard":
-          result = this.getPromptGuard(params as Parameters<typeof this.getPromptGuard>[0]);
+          result = await this.getPromptGuard(params as any);
           break;
         case "check_before_tool":
-          result = this.checkBeforeTool(params as Parameters<typeof this.checkBeforeTool>[0]);
+          result = this.checkBeforeTool(params as any);
           break;
         case "check_tool_result":
-          result = this.checkToolResult(params as Parameters<typeof this.checkToolResult>[0]);
+          result = this.checkToolResult(params as any);
+          break;
+        case "check_llm_output":
+          result = this.checkLlmOutput(params as any);
           break;
         case "redact_output":
-          result = this.redactOutput(params as Parameters<typeof this.redactOutput>[0]);
+          result = this.redactOutput(params as any);
           break;
         case "update_state":
-          result = this.updateState(params as Parameters<typeof this.updateState>[0]);
+          result = this.updateState(params as any);
           break;
         case "get_config":
-          result = this.getConfig();
+          result = this.engine.config;
           break;
         case "scan_skills":
-          result = await this.scanSkills(params as Parameters<typeof this.scanSkills>[0]);
+          result = await this.scanSkills(params as any);
           break;
         case "ping":
           result = { pong: true, initialized: this.initialized };
@@ -593,124 +255,14 @@ export class AegisRpcRuntime {
       return { id, result };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.logger.error(`RPC method ${method} failed: ${message}`);
+      console.error(`RPC method ${method} failed: ${message}`);
       return { id, error: { message, code: -32000 } };
     }
   }
-
-  // -----------------------------------------------------------------------
-  // Private helpers
-  // -----------------------------------------------------------------------
 
   private ensureInit(): void {
     if (!this.initialized) {
       throw new Error("AegisRpcRuntime not initialized — call init first");
     }
-  }
-
-  private readCommandText(args: Record<string, unknown>): string | undefined {
-    for (const key of ["command", "cmd", "code", "script"]) {
-      const value = args[key];
-      if (typeof value === "string" && value.trim()) {
-        return value.trim();
-      }
-    }
-    return undefined;
-  }
-
-  private mergeDefenseModes(...modes: DefenseMode[]): DefenseMode {
-    if (modes.includes("enforce")) return "enforce";
-    if (modes.includes("observe")) return "observe";
-    return "off";
-  }
-
-  private resolveToolCallDefenseMode(
-    modes: ToolCallDefenseModes,
-    source: ToolCallDefenseModeSource | readonly ToolCallDefenseModeSource[],
-  ): DefenseMode {
-    const sources: readonly ToolCallDefenseModeSource[] = Array.isArray(source) ? source : [source];
-    return this.mergeDefenseModes(...sources.map((entry) => modes[entry]));
-  }
-
-  private emitDefenseEvent(event: Record<string, unknown>): void {
-    const line = JSON.stringify({ ...event, timestamp: Date.now() }) + "\n";
-    const filePath = path.join(this.stateDir, DEFENSE_EVENTS_FILENAME);
-    const dir = this.stateDir;
-    const doWrite = async () => {
-      await fs.mkdir(dir, { recursive: true });
-      await fs.appendFile(filePath, line, "utf8");
-    };
-    doWrite().catch((err) => {
-      this.logger.error(`Failed to write defense event to ${filePath}: ${err}`);
-    });
-  }
-
-  private createEventWriter(filePath: string) {
-    const dir = path.dirname(filePath);
-    let ensured = false;
-    return (event: Record<string, unknown>): void => {
-      const line = JSON.stringify({ ...event, timestamp: Date.now() }) + "\n";
-      const doWrite = async () => {
-        if (!ensured) {
-          await fs.mkdir(dir, { recursive: true });
-          ensured = true;
-        }
-        await fs.appendFile(filePath, line, "utf8");
-      };
-      doWrite().catch((err) => {
-        this.logger.error(`Failed to write defense event to ${filePath}: ${err}`);
-      });
-    };
-  }
-
-  private resolveConfig(raw: Partial<ClawAegisPluginConfig>): ClawAegisPluginConfig {
-    const allDefensesEnabled = raw.allDefensesEnabled !== false;
-    const defaultBlockingMode = raw.defaultBlockingMode ?? "enforce";
-
-    const resolveMode = (
-      enabled: boolean | undefined,
-      mode: DefenseMode | undefined,
-    ): DefenseMode => {
-      if (!allDefensesEnabled || enabled === false) return "off";
-      return mode ?? defaultBlockingMode;
-    };
-
-    return {
-      allDefensesEnabled,
-      defaultBlockingMode,
-      selfProtectionEnabled: allDefensesEnabled && raw.selfProtectionEnabled !== false,
-      selfProtectionMode: resolveMode(raw.selfProtectionEnabled, raw.selfProtectionMode),
-      commandBlockEnabled: allDefensesEnabled && raw.commandBlockEnabled !== false,
-      commandBlockMode: resolveMode(raw.commandBlockEnabled, raw.commandBlockMode),
-      encodingGuardEnabled: allDefensesEnabled && raw.encodingGuardEnabled !== false,
-      encodingGuardMode: resolveMode(raw.encodingGuardEnabled, raw.encodingGuardMode),
-      scriptProvenanceGuardEnabled:
-        allDefensesEnabled && raw.scriptProvenanceGuardEnabled !== false,
-      scriptProvenanceGuardMode: resolveMode(
-        raw.scriptProvenanceGuardEnabled,
-        raw.scriptProvenanceGuardMode,
-      ),
-      memoryGuardEnabled: allDefensesEnabled && raw.memoryGuardEnabled !== false,
-      memoryGuardMode: resolveMode(raw.memoryGuardEnabled, raw.memoryGuardMode),
-      userRiskScanEnabled: allDefensesEnabled && raw.userRiskScanEnabled !== false,
-      skillScanEnabled: allDefensesEnabled && raw.skillScanEnabled !== false,
-      toolResultScanEnabled: allDefensesEnabled && raw.toolResultScanEnabled !== false,
-      outputRedactionEnabled: allDefensesEnabled && raw.outputRedactionEnabled !== false,
-      promptGuardEnabled: allDefensesEnabled && raw.promptGuardEnabled !== false,
-      loopGuardEnabled: allDefensesEnabled && raw.loopGuardEnabled !== false,
-      loopGuardMode: resolveMode(raw.loopGuardEnabled, raw.loopGuardMode),
-      exfiltrationGuardEnabled: allDefensesEnabled && raw.exfiltrationGuardEnabled !== false,
-      exfiltrationGuardMode: resolveMode(raw.exfiltrationGuardEnabled, raw.exfiltrationGuardMode),
-      toolCallEnforcementEnabled:
-        allDefensesEnabled && raw.toolCallEnforcementEnabled !== false,
-      dispatchGuardEnabled: allDefensesEnabled && raw.dispatchGuardEnabled !== false,
-      dispatchGuardMode: resolveMode(raw.dispatchGuardEnabled, raw.dispatchGuardMode),
-      protectedPaths: raw.protectedPaths ?? [],
-      protectedSkills: raw.protectedSkills ?? [],
-      protectedPlugins: raw.protectedPlugins ?? [],
-      skillRoots: raw.skillRoots ?? [],
-      extraProtectedRoots: raw.extraProtectedRoots ?? [],
-      startupSkillScan: raw.startupSkillScan !== false,
-    };
   }
 }

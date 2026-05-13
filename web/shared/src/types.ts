@@ -31,6 +31,8 @@ export type AegisConfig = {
   protectedSkills: string[];
   protectedPlugins: string[];
   startupSkillScan: boolean;
+  webUiEnabled: boolean;
+  webUiPort: number;
 };
 
 export type ConfigResponse = {

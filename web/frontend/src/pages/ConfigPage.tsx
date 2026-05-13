@@ -142,12 +142,30 @@ export function ConfigPage() {
         {t("config.advancedSettings")}
       </button>
       {showAdvanced && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6 space-y-4">
           <ToggleSwitch
             checked={draft.startupSkillScan}
             onChange={(v) => patch({ startupSkillScan: v })}
             label={t("config.startupSkillScan")}
           />
+          <div className="border-t border-gray-100 pt-4">
+            <ToggleSwitch
+              checked={draft.webUiEnabled}
+              onChange={(v) => patch({ webUiEnabled: v })}
+              label={t("config.enableWebUi")}
+            />
+            {draft.webUiEnabled && (
+              <div className="mt-3 flex items-center gap-3 ml-11">
+                <span className="text-sm text-gray-600">{t("config.webUiPort")}:</span>
+                <input
+                  type="number"
+                  value={draft.webUiPort}
+                  onChange={(e) => patch({ webUiPort: parseInt(e.target.value, 10) || 3800 })}
+                  className="w-20 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            )}
+          </div>
         </div>
       )}
 

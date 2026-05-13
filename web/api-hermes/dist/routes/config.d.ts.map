@@ -1,1 +1,0 @@
-{"version":3,"file":"config.d.ts","sourceRoot":"","sources":["../../src/routes/config.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,SAAS,CAAC;AACjC,OAAO,EAAE,aAAa,EAAe,MAAM,sBAAsB,CAAC;AAClE,OAAO,EAAE,cAAc,EAAE,MAAM,kBAAkB,CAAC;AAkClD,wBAAgB,kBAAkB,CAChC,aAAa,EAAE,aAAa,EAC5B,SAAS,CAAC,EAAE,cAAc,GACzB,MAAM,CAiER"}

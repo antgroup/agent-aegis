@@ -1,1 +1,0 @@
-{"version":3,"file":"skills.d.ts","sourceRoot":"","sources":["../../src/routes/skills.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,SAAS,CAAC;AACjC,OAAO,EAAE,YAAY,EAAE,MAAM,qBAAqB,CAAC;AACnD,OAAO,EAAE,cAAc,EAAE,MAAM,kBAAkB,CAAC;AAElD,wBAAgB,kBAAkB,CAChC,YAAY,EAAE,YAAY,EAC1B,SAAS,CAAC,EAAE,cAAc,GACzB,MAAM,CAqGR"}

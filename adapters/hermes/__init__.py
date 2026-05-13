@@ -224,8 +224,21 @@ def register(ctx):
     """Hermes plugin entry point — register hooks and wrap tools."""
     from .bridge import AegisEngine
     from .tool_wrappers import wrap_dangerous_tools
+    from .paths import find_rpc_server
 
     logger.info("ClawAegis: Initializing security plugin...")
+
+    # 0. Pre-initialization check (especially for GitHub installs)
+    try:
+        find_rpc_server()
+    except FileNotFoundError:
+        root = Path(__file__).resolve().parent.parent.parent
+        logger.error("=" * 60)
+        logger.error("ClawAegis is not built! Defense will not be active.")
+        logger.error(f"Please run the following commands in: {root}")
+        logger.error("    npm install && npm run build")
+        logger.error("=" * 60)
+        return
 
     # Check Hermes configuration for potential conflicts
     hermes_check = _check_hermes_config()

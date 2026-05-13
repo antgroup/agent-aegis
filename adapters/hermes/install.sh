@@ -76,7 +76,7 @@ echo ""
 
 # 2. Build Web API
 echo "==> Building Web API..."
-cd "$REPO_ROOT/web/api-hermes"
+cd "$REPO_ROOT/web/api"
 if [ ! -d node_modules ]; then
     echo "    Installing web dependencies..."
     npm install
@@ -130,7 +130,7 @@ cp "$REPO_ROOT/src/"*.js "$HERMES_PLUGIN_DIR/src/"
 # Copy Web API
 echo "    Copying Web API..."
 mkdir -p "$HERMES_PLUGIN_DIR/web"
-cp -r "$REPO_ROOT/web/api-hermes/dist/"* "$HERMES_PLUGIN_DIR/web/"
+cp -r "$REPO_ROOT/web/api/dist/"* "$HERMES_PLUGIN_DIR/web/"
 
 # Create source root marker
 echo "$REPO_ROOT" > "$HERMES_PLUGIN_DIR/.clawaegis-root"

@@ -34,6 +34,8 @@ export const aegisConfigSchema = z.object({
   protectedSkills: z.array(z.string()).optional(),
   protectedPlugins: z.array(z.string()).optional(),
   startupSkillScan: z.boolean().optional(),
+  webUiEnabled: z.boolean().optional(),
+  webUiPort: z.number().optional(),
 });
 
 export type AegisConfigPartial = z.infer<typeof aegisConfigSchema>;
@@ -69,6 +71,8 @@ export const CONFIG_DEFAULTS = {
   protectedSkills: [] as string[],
   protectedPlugins: [] as string[],
   startupSkillScan: true,
+  webUiEnabled: true,
+  webUiPort: 3800,
 };
 
 // ---- Defense group metadata for the UI ----
