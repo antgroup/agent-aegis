@@ -14,7 +14,19 @@
     "trustedSkills": "Trusted Skills:",
     "recentEvents": "Recent Events",
     "noDetails": "No details",
-    "noEvents": "No events recorded yet"
+    "noEvents": "No events recorded yet",
+    "defenseConfig": "Defense Configuration",
+    "protectedPathsCount": "Protected Paths",
+    "protectedSkillsCount": "Protected Skills",
+    "protectedPluginsCount": "Protected Plugins",
+    "weeklyEvents": "Weekly Event Summary",
+    "eventBreakdown": "Event Breakdown",
+    "blocked": "Blocked",
+    "observed": "Observed",
+    "skillTrust": "Skill Trust Ratio",
+    "trusted": "Trusted",
+    "untrusted": "Untrusted",
+    "noChartData": "No data available"
   },
   "stats": {
     "enforcing": "Enforcing",

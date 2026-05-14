@@ -30,7 +30,7 @@ export function EventsPage() {
   };
 
   return (
-    <div className="max-w-5xl">
+    <div>
       <div className="flex items-center gap-3 mb-6">
         <ScrollText size={24} className="text-blue-600" />
         <h1 className="text-xl font-bold">{t("events.title")}</h1>
@@ -72,7 +72,7 @@ export function EventsPage() {
         </select>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
         {isLoading ? (
           <div className="p-4 text-sm text-gray-400">{t("events.loading")}</div>
         ) : data?.events.length ? (

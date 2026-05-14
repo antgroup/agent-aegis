@@ -14,7 +14,19 @@
     "trustedSkills": "受信任技能：",
     "recentEvents": "最近事件",
     "noDetails": "无详情",
-    "noEvents": "暂无事件记录"
+    "noEvents": "暂无事件记录",
+    "defenseConfig": "防御配置概览",
+    "protectedPathsCount": "受保护路径",
+    "protectedSkillsCount": "受保护技能",
+    "protectedPluginsCount": "受保护插件",
+    "weeklyEvents": "近一周事件趋势",
+    "eventBreakdown": "事件分布",
+    "blocked": "已拦截",
+    "observed": "已观察",
+    "skillTrust": "技能信任比例",
+    "trusted": "受信任",
+    "untrusted": "不受信任",
+    "noChartData": "暂无数据"
   },
   "stats": {
     "enforcing": "执行中",

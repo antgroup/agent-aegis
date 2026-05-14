@@ -32,7 +32,7 @@ export function SkillsPage() {
     }`;
 
   return (
-    <div className="max-w-5xl">
+    <div>
       <div className="flex items-center gap-3 mb-6">
         <Shield size={24} className="text-blue-600" />
         <h1 className="text-xl font-bold">{t("skills.title")}</h1>
@@ -81,7 +81,7 @@ export function SkillsPage() {
             </span>
           </div>
 
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
             {scanLoading ? (
               <div className="p-4 text-sm text-gray-400">{t("skills.loading")}</div>
             ) : scanData?.events.length ? (
@@ -156,7 +156,7 @@ export function SkillsPage() {
               {t("skills.totalSkills", { count: skillData?.total ?? 0 })}
             </span>
           </div>
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
             {skillLoading ? (
               <div className="p-4 text-sm text-gray-400">{t("skills.loading")}</div>
             ) : skillData?.trustedSkills.length ? (
