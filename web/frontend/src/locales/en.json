@@ -66,9 +66,7 @@
     "protectedPluginsHelp": "Plugin IDs to protect.",
     "protectedPluginsPlaceholder": "audit-guard",
     "advancedSettings": "Advanced Settings",
-    "startupSkillScan": "Scan Skills at Startup",
-    "enableWebUi": "Enable Web Management Panel (Background)",
-    "webUiPort": "Web UI Port"
+    "startupSkillScan": "Scan Skills at Startup"
   },
   "events": {
     "title": "Security Events",

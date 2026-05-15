@@ -1,5 +1,8 @@
 {
   "id": "claw-aegis",
+  "activation": {
+    "onStartup": true
+  },
   "name": "Claw Aegis",
   "description": "Minimal safety guard plugin for OpenClaw prompt, tool, and tool-result flows.",
   "uiHints": {

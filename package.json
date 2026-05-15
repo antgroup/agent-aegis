@@ -4,6 +4,7 @@
   "private": true,
   "description": "OpenClaw safety guard plugin for prompt, tool, and tool-result hardening.",
   "type": "module",
+  "main": "index.js",
   "files": [
     "index.ts",
     "index.js",
@@ -22,10 +23,11 @@
   ],
   "openclaw": {
     "extensions": [
-      "./index.ts"
+      "./index.js"
     ]
   },
   "scripts": {
+    "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest"
   },

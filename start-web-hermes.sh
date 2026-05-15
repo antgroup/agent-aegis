@@ -43,8 +43,8 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}Starting ClawAegis Web UI for Hermes...${NC}"
 echo ""
 
-# Check if web/api-hermes is built
-WEB_API_DIR="$SCRIPT_DIR/web/api-hermes"
+# Check if web/api is built
+WEB_API_DIR="$SCRIPT_DIR/web/api"
 if [ ! -f "$WEB_API_DIR/dist/index.js" ]; then
     echo -e "${YELLOW}Web API not built. Building now...${NC}"
     cd "$WEB_API_DIR"

@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { API_PREFIX } from "@claw-aegis-web/shared";
 import { createConfigRouter } from "./routes/config.js";
@@ -13,12 +14,10 @@ import { StateService } from "./services/state-service.js";
 import { EventService } from "./services/event-service.js";
 import { SkillScanEventService } from "./services/skill-scan-event-service.js";
 import { FileWatcher } from "./services/file-watcher.js";
-import { AegisRpcClient } from "./services/rpc-client.js";
 
 export type ServerOptions = {
   configDir: string;
   stateDir: string;
-  rpcServerPath?: string;
 };
 
 export function createServer(options: ServerOptions) {
@@ -32,37 +31,11 @@ export function createServer(options: ServerOptions) {
   const eventService = new EventService();
   const skillScanEventService = new SkillScanEventService();
   
-  // Optional RPC client for Hermes
-  const rpcClient = options.rpcServerPath ? new AegisRpcClient(options.rpcServerPath) : undefined;
-  let rpcInitialized = false;
-
   const fileWatcher = new FileWatcher(configService, stateService, eventService, skillScanEventService);
 
   fileWatcher.start().catch((err) =>
     console.error("[claw-aegis-web] FileWatcher start error:", err),
   );
-
-  if (rpcClient) {
-      async function initRpc() {
-          try {
-              rpcClient!.start();
-              await new Promise((resolve) => setTimeout(resolve, 500));
-              const config = await configService.getUserConfig();
-              // For Hermes, pluginRootDir is 2 levels up from configDir
-              const pluginRootDir = path.resolve(options.configDir, "..", "..");
-              await rpcClient!.init({
-                  config,
-                  stateDir: options.stateDir,
-                  pluginRootDir,
-              });
-              rpcInitialized = true;
-              console.log("[claw-aegis-web] RPC client initialized successfully");
-          } catch (err) {
-              console.error("[claw-aegis-web] RPC initialization failed:", err instanceof Error ? err.message : String(err));
-          }
-      }
-      initRpc();
-  }
 
   app.use(`${API_PREFIX}/config`, createConfigRouter(configService));
   app.use(`${API_PREFIX}/status`, createStatusRouter(configService, stateService));
@@ -74,35 +47,29 @@ export function createServer(options: ServerOptions) {
     res.json({ 
         status: "ok", 
         version: "0.1.0",
-        app: process.env.AEGIS_APP || "openclaw",
-        rpc: rpcClient ? { connected: rpcClient.isReady(), initialized: rpcInitialized } : undefined
-    });
-  });
-
-  // RPC status endpoint
-  app.get(`${API_PREFIX}/rpc/status`, (_req, res) => {
-    if (!rpcClient) return res.status(404).json({ ok: false, error: "RPC not enabled" });
-    res.json({
-      ok: true,
-      data: {
-        connected: rpcClient.isReady(),
-        initialized: rpcInitialized,
-      },
+        app: process.env.AEGIS_APP || "openclaw"
     });
   });
 
   // Serve frontend static files in production
-  const frontendDist = path.resolve(
+  const frontendDist = process.env.AEGIS_STATIC_DIR || path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
-    "../../frontend/dist",
+    // Support both source layout (../../frontend/dist) and installed layout (./static)
+    existsSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "./static"))
+      ? "./static"
+      : "../../frontend/dist",
   );
-  app.use(express.static(frontendDist));
-  app.get("*", (_req, res, next) => {
-    if (_req.path.startsWith(API_PREFIX)) return next();
-    res.sendFile(path.join(frontendDist, "index.html"), (err) => {
-      if (err) next();
+  if (existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+    app.get("*", (_req, res, next) => {
+      if (_req.path.startsWith(API_PREFIX)) return next();
+      res.sendFile(path.join(frontendDist, "index.html"), (err) => {
+        if (err) next();
+      });
     });
-  });
+  } else {
+    console.warn(`[claw-aegis-web] Static directory not found: ${frontendDist}. Web UI may not be available.`);
+  }
 
   // Error handler
   app.use(
@@ -117,5 +84,5 @@ export function createServer(options: ServerOptions) {
     },
   );
 
-  return { app, rpcClient };
+  return { app };
 }

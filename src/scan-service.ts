@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import {
@@ -11,6 +12,7 @@ import {
   SKILL_SCAN_FILE_MAX_BYTES,
   SKILL_SCAN_QUEUE_MAX,
   SKILL_SCAN_TARGET_FILENAME,
+  SKILL_SCAN_ALLOWED_EXTENSIONS,
   SKILL_SCAN_TIMEOUT_MS,
 } from "./config.js";
 import { scanSkillText } from "./scan-worker.js";
@@ -51,7 +53,14 @@ type PreparedSkillFile = {
 
 function normalizeSkillId(value: string | undefined, fallbackPath: string): string {
   const trimmed = value?.trim().replace(/^['"]|['"]$/g, "");
-  return trimmed || path.basename(path.dirname(fallbackPath));
+  if (trimmed) return trimmed;
+  
+  const dirname = path.basename(path.dirname(fallbackPath));
+  if (dirname === "skills" || dirname === "workspace") {
+    // If it's in a generic directory, use the filename without extension
+    return path.parse(fallbackPath).name;
+  }
+  return dirname;
 }
 
 function extractSkillId(filePath: string, text: string): string {
@@ -152,7 +161,19 @@ export class SkillScanService {
   }
 
   private normalizeRoots(roots: string[]): string[] {
-    return [...new Set(roots.map((root) => path.resolve(root.trim())).filter(Boolean))];
+    return [
+      ...new Set(
+        roots
+          .map((root) => {
+            const trimmed = root.trim();
+            if (trimmed.startsWith("~")) {
+              return path.join(os.homedir(), trimmed.slice(1));
+            }
+            return path.resolve(trimmed);
+          })
+          .filter(Boolean),
+      ),
+    ];
   }
 
   private buildAssessment(
@@ -232,7 +253,11 @@ export class SkillScanService {
           stack.push(absolutePath);
           continue;
         }
-        if (!entry.isFile() || entry.name !== SKILL_SCAN_TARGET_FILENAME) {
+        if (!entry.isFile()) {
+          continue;
+        }
+        const ext = path.extname(entry.name).toLowerCase();
+        if (entry.name !== SKILL_SCAN_TARGET_FILENAME && !SKILL_SCAN_ALLOWED_EXTENSIONS.includes(ext)) {
           continue;
         }
         await visitor(absolutePath, root);
@@ -499,7 +524,9 @@ export class SkillScanService {
     filePath: string,
     sourceRoot: string,
   ): Promise<PreparedSkillFile | null> {
-    if (path.basename(filePath) !== SKILL_SCAN_TARGET_FILENAME) {
+    const filename = path.basename(filePath);
+    const ext = path.extname(filename).toLowerCase();
+    if (filename !== SKILL_SCAN_TARGET_FILENAME && !SKILL_SCAN_ALLOWED_EXTENSIONS.includes(ext)) {
       return null;
     }
 

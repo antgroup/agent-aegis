@@ -18,6 +18,7 @@ export const SKILL_SCAN_FAILURE_WINDOW_MS = 60_000;
 export const SKILL_SCAN_FAILURE_THRESHOLD = 3;
 export const SKILL_SCAN_FILE_MAX_BYTES = 100 * 1024;
 export const SKILL_SCAN_TARGET_FILENAME = "SKILL.md";
+export const SKILL_SCAN_ALLOWED_EXTENSIONS = [".md", ".py", ".sh", ".js"];
 export const TRUSTED_SKILLS_FILENAME = "trusted-skills.json";
 export const SELF_INTEGRITY_FILENAME = "self-integrity.json";
 export const DEFENSE_EVENTS_FILENAME = "defense-events.jsonl";
@@ -285,8 +286,8 @@ function readDefenseMode(raw, params) {
     const explicitMode = raw[params.modeKey];
     return isDefenseMode(explicitMode) ? explicitMode : params.defaultMode;
 }
-export function resolveClawAegisPluginConfig(api) {
-    const raw = (api.pluginConfig ?? {});
+export function resolveClawAegisPluginConfig(params) {
+    const raw = (params.pluginConfig ?? {});
     const allDefensesEnabled = raw.allDefensesEnabled !== false;
     const defaultBlockingMode = isDefenseMode(raw.defaultBlockingMode)
         ? raw.defaultBlockingMode
@@ -364,13 +365,19 @@ export function resolveClawAegisPluginConfig(api) {
         toolCallEnforcementEnabled: readEnabledFlag(raw, "toolCallEnforcementEnabled", allDefensesEnabled),
         dispatchGuardEnabled: dispatchGuardMode !== "off",
         dispatchGuardMode,
-        protectedPaths: normalizeStringList(raw.protectedPaths, api.resolvePath),
+        protectedPaths: normalizeStringList(raw.protectedPaths, params.resolvePath),
         protectedSkills: normalizeIdentifierList(raw.protectedSkills),
         protectedPlugins: normalizeIdentifierList(raw.protectedPlugins),
-        skillRoots: normalizeStringList(raw.skillRoots, api.resolvePath),
-        extraProtectedRoots: normalizeStringList(raw.extraProtectedRoots, api.resolvePath),
+        skillRoots: normalizeStringList(raw.skillRoots, params.resolvePath),
+        extraProtectedRoots: normalizeStringList(raw.extraProtectedRoots, params.resolvePath),
         startupSkillScan: raw.startupSkillScan !== false,
     };
+}
+export function resolveClawAegisPluginConfigFromApi(api) {
+    return resolveClawAegisPluginConfig({
+        pluginConfig: api.pluginConfig,
+        resolvePath: (p) => api.resolvePath(p),
+    });
 }
 export function resolveClawAegisStateDir(api) {
     return path.join(api.runtime.state.resolveStateDir(), "plugins", CLAW_AEGIS_PLUGIN_ID);

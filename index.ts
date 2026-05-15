@@ -24,6 +24,25 @@ export function wrapHookFailOpen(
   };
 }
 
+export function wrapSyncHookFailOpen(
+  api: OpenClawPluginApi,
+  hookName: string,
+  handler: GenericHookHandler,
+): GenericHookHandler {
+  return (event, ctx) => {
+    try {
+      return handler(event, ctx);
+    } catch (error) {
+      api.logger.error(
+        `[claw-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return undefined;
+    }
+  };
+}
+
 export function registerClawAegisPlugin(
   api: OpenClawPluginApi,
   createRuntime: typeof createClawAegisRuntime = createClawAegisRuntime,
@@ -33,7 +52,7 @@ export function registerClawAegisPlugin(
     api.on("gateway_start", wrapHookFailOpen(api, "gateway_start", runtime.hooks.gateway_start));
     api.on(
       "message_received",
-      wrapHookFailOpen(api, "message_received", runtime.hooks.message_received),
+      wrapSyncHookFailOpen(api, "message_received", runtime.hooks.message_received),
     );
     api.on(
       "message_sending",
@@ -57,15 +76,15 @@ export function registerClawAegisPlugin(
     );
     api.on(
       "after_tool_call",
-      wrapHookFailOpen(api, "after_tool_call", runtime.hooks.after_tool_call),
+      wrapSyncHookFailOpen(api, "after_tool_call", runtime.hooks.after_tool_call),
     );
     api.on(
       "before_message_write",
-      wrapHookFailOpen(api, "before_message_write", runtime.hooks.before_message_write),
+      wrapSyncHookFailOpen(api, "before_message_write", runtime.hooks.before_message_write),
     );
-    api.on("llm_output", wrapHookFailOpen(api, "llm_output", runtime.hooks.llm_output));
-    api.on("agent_end", wrapHookFailOpen(api, "agent_end", runtime.hooks.agent_end));
-    api.on("session_end", wrapHookFailOpen(api, "session_end", runtime.hooks.session_end));
+    api.on("llm_output", wrapSyncHookFailOpen(api, "llm_output", runtime.hooks.llm_output));
+    api.on("agent_end", wrapSyncHookFailOpen(api, "agent_end", runtime.hooks.agent_end));
+    api.on("session_end", wrapSyncHookFailOpen(api, "session_end", runtime.hooks.session_end));
   } catch (error) {
     api.logger.error(
       `[claw-aegis] register failed; fail-open keeps OpenClaw running: ${

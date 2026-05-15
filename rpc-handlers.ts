@@ -58,6 +58,14 @@ export class AegisRpcRuntime {
     skillRoots?: string[];
     protectedRoots?: string[];
   }): Promise<{ ok: true }> {
+    const expandedStateDir = params.stateDir.startsWith("~")
+      ? path.join(os.homedir(), params.stateDir.slice(1))
+      : params.stateDir;
+    
+    const expandedSkillRoots = (params.skillRoots ?? []).map(p => 
+      p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p
+    );
+
     // Create a mock API object for the engine
     const mockApi = {
       rootDir: params.pluginRootDir,
@@ -70,7 +78,7 @@ export class AegisRpcRuntime {
       },
       runtime: {
         state: {
-          resolveStateDir: () => params.stateDir,
+          resolveStateDir: () => expandedStateDir,
         },
       },
       // Hermes-specific path resolution: expand ~ and resolve relative to plugin root
@@ -83,8 +91,8 @@ export class AegisRpcRuntime {
     };
 
     this.engine = new AegisDefenseEngine(mockApi as any, {
-        stateDir: params.stateDir,
-        skillScanRoots: params.skillRoots,
+        stateDir: expandedStateDir,
+        skillScanRoots: expandedSkillRoots,
     });
     await this.engine.start();
 

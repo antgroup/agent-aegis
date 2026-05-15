@@ -66,9 +66,7 @@
     "protectedPluginsHelp": "需要保护的插件 ID。",
     "protectedPluginsPlaceholder": "audit-guard",
     "advancedSettings": "高级设置",
-    "startupSkillScan": "启动时扫描技能",
-    "enableWebUi": "自动开启 Web 管理面板 (后台)",
-    "webUiPort": "Web UI 端口"
+    "startupSkillScan": "启动时扫描技能"
   },
   "events": {
     "title": "安全事件",

@@ -23,6 +23,7 @@ export const SKILL_SCAN_FAILURE_WINDOW_MS = 60_000;
 export const SKILL_SCAN_FAILURE_THRESHOLD = 3;
 export const SKILL_SCAN_FILE_MAX_BYTES = 100 * 1024;
 export const SKILL_SCAN_TARGET_FILENAME = "SKILL.md";
+export const SKILL_SCAN_ALLOWED_EXTENSIONS = [".md", ".py", ".sh", ".js"];
 
 export const TRUSTED_SKILLS_FILENAME = "trusted-skills.json";
 export const SELF_INTEGRITY_FILENAME = "self-integrity.json";
@@ -70,8 +71,6 @@ export type ClawAegisPluginConfig = {
   toolCallEnforcementEnabled: boolean;
   dispatchGuardEnabled: boolean;
   dispatchGuardMode: DefenseMode;
-  webUiEnabled: boolean;
-  webUiPort: number;
   protectedPaths: string[];
   protectedSkills: string[];
   protectedPlugins: string[];
@@ -119,11 +118,6 @@ export const clawAegisPluginConfigSchema = {
     toolCallEnforcementEnabled: defaultEnabledBooleanSchema,
     dispatchGuardEnabled: defaultEnabledBooleanSchema,
     dispatchGuardMode: defaultDefenseModeSchema,
-    webUiEnabled: defaultEnabledBooleanSchema,
-    webUiPort: {
-      type: "number",
-      default: 3800,
-    },
     protectedPaths: {
       type: "array",
       items: { type: "string" },
@@ -480,8 +474,6 @@ export function resolveClawAegisPluginConfig(params: {
     toolCallEnforcementEnabled: readEnabledFlag(raw, "toolCallEnforcementEnabled", allDefensesEnabled),
     dispatchGuardEnabled: dispatchGuardMode !== "off",
     dispatchGuardMode,
-    webUiEnabled: raw.webUiEnabled !== false,
-    webUiPort: typeof raw.webUiPort === "number" ? raw.webUiPort : 3800,
     protectedPaths: normalizeStringList(raw.protectedPaths, params.resolvePath),
     protectedSkills: normalizeIdentifierList(raw.protectedSkills),
     protectedPlugins: normalizeIdentifierList(raw.protectedPlugins),

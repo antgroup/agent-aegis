@@ -131,6 +131,16 @@ cp "$REPO_ROOT/src/"*.js "$HERMES_PLUGIN_DIR/src/"
 echo "    Copying Web API..."
 mkdir -p "$HERMES_PLUGIN_DIR/web"
 cp -r "$REPO_ROOT/web/api/dist/"* "$HERMES_PLUGIN_DIR/web/"
+cp "$REPO_ROOT/web/api/package.json" "$HERMES_PLUGIN_DIR/web/"
+
+# Copy frontend dist to static/ for served UI
+if [ -d "$REPO_ROOT/web/frontend/dist" ]; then
+    echo "    Copying frontend distribution..."
+    mkdir -p "$HERMES_PLUGIN_DIR/web/static"
+    cp -r "$REPO_ROOT/web/frontend/dist/"* "$HERMES_PLUGIN_DIR/web/static/"
+else
+    echo "    WARNING: Frontend dist not found. Web UI will be restricted to API only."
+fi
 
 # Create source root marker
 echo "$REPO_ROOT" > "$HERMES_PLUGIN_DIR/.clawaegis-root"

@@ -2,8 +2,6 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { spawn, type ChildProcess } from "node:child_process";
-import fsSync from "node:fs";
 
 import {
   BLOCK_REASON_DISPATCH_GUARD,
@@ -126,7 +124,6 @@ export class AegisDefenseEngine {
   public readonly staticSystemContext: string | undefined;
 
   private readonly toolCallDefenseStrategies: readonly ToolCallDefenseStrategy[];
-  private webUiProcess: ChildProcess | null = null;
 
   constructor(
     private readonly api: {
@@ -177,10 +174,6 @@ export class AegisDefenseEngine {
 
   async start(): Promise<void> {
     this.logger.info("claw-aegis: 引擎启动", { event: "engine_start" });
-
-    if (this.config.webUiEnabled) {
-        this.spawnWebUi();
-    }
 
     try {
       await this.state.loadPersistentState();
@@ -877,57 +870,6 @@ export class AegisDefenseEngine {
       });
       this.finishCheck("before_message_write", "tool_result_scan", sessionKey, "degraded", startedAt);
       return undefined;
-    }
-  }
-
-  // -----------------------------------------------------------------------
-  // Web UI Management
-  // -----------------------------------------------------------------------
-
-  private spawnWebUi(): void {
-    if (this.webUiProcess) return;
-
-    const pluginRoot = this.api.rootDir ? path.resolve(this.api.rootDir) : undefined;
-    
-    // Determine path to built WebUI. 
-    // In OpenClaw: ~/.openclaw/extensions/claw-aegis/web/api/dist/index.js
-    // In Hermes: ~/.hermes/plugins/claw-aegis/web/index.js (from install.sh)
-    let entryPath = "";
-    const openClawEntry = path.join(pluginRoot || "", "web", "api", "dist", "index.js");
-    const hermesEntry = path.join(pluginRoot || "", "web", "index.js");
-
-    if (pluginRoot && fsSync.existsSync(openClawEntry)) {
-        entryPath = openClawEntry;
-    } else if (pluginRoot && fsSync.existsSync(hermesEntry)) {
-        entryPath = hermesEntry;
-    }
-
-    if (!entryPath) {
-        this.logger.warn("claw-aegis: 无法找到 Web UI 入口文件，自动启动跳过");
-        return;
-    }
-
-    this.logger.info(`claw-aegis: 正在启动 Web UI (端口: ${this.config.webUiPort})...`);
-
-    const env = {
-        ...process.env,
-        AEGIS_PORT: String(this.config.webUiPort),
-        AEGIS_CONFIG_DIR: pluginRoot,
-        AEGIS_STATE_DIR: this.stateDir,
-        AEGIS_APP: this.api.rootDir?.includes(".hermes") ? "hermes" : "openclaw",
-    };
-
-    try {
-        this.webUiProcess = spawn("node", [entryPath], {
-            env,
-            detached: true,
-            stdio: "ignore",
-        });
-
-        this.webUiProcess.unref();
-        this.logger.info(`claw-aegis: Web UI 已在后台启动 (PID: ${this.webUiProcess.pid})`);
-    } catch (error) {
-        this.logger.error(`claw-aegis: Web UI 启动失败: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

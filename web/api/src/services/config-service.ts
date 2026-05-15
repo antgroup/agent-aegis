@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import yaml from "js-yaml";
 import type { AegisConfig, ConfigUpdateRequest } from "@claw-aegis-web/shared";
 import { CONFIG_DEFAULTS, aegisConfigSchema } from "@claw-aegis-web/shared";
@@ -133,12 +134,17 @@ export class ConfigService {
       toolCallEnforcementEnabled: readEnabled("toolCallEnforcementEnabled"),
       dispatchGuardEnabled: readMode("dispatchGuardEnabled", "dispatchGuardMode") !== "off",
       dispatchGuardMode: readMode("dispatchGuardEnabled", "dispatchGuardMode"),
-      protectedPaths: normalizeStringArray(raw.protectedPaths),
-      protectedSkills: normalizeStringArray(raw.protectedSkills),
-      protectedPlugins: normalizeStringArray(raw.protectedPlugins),
+      protectedPaths: normalizeStringArray(raw.protectedPaths).map(p => 
+        p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p
+      ),
+      protectedSkills: normalizeStringArray(raw.protectedSkills).map(p => 
+        p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p
+      ),
+      protectedPlugins: normalizeStringArray(raw.protectedPlugins).map(p => 
+        p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p
+      ),
       startupSkillScan: raw.startupSkillScan !== false,
-      webUiEnabled: raw.webUiEnabled !== false,
-      webUiPort: typeof raw.webUiPort === "number" ? raw.webUiPort : CONFIG_DEFAULTS.webUiPort,
+      webPort: typeof raw.webPort === "number" ? raw.webPort : undefined,
     };
   }
 

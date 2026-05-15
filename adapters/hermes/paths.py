@@ -22,17 +22,25 @@ def get_plugin_root() -> Path:
     
     Works whether installed via install.sh or direct hermes plugins install.
     """
-    # This file is at: ClawAegis/adapters/hermes/paths.py
-    # Roots to check:
-    # 1. Parent of adapters (if in repo)
-    # 2. Parent of current file (if flat install)
+    # This file is at: ~/.hermes/plugins/claw-aegis/paths.py (installed)
+    # or ClawAegis/adapters/hermes/paths.py (source)
     this_file = Path(__file__).resolve()
     
-    # Check if we are in adapters/hermes/
+    # 1. Check for the marker file in the directory of this file
+    marker = _read_plugin_root_marker(this_file.parent)
+    if marker:
+        return marker
+        
+    # 2. Check if we are in adapters/hermes/
     if this_file.parent.name == "hermes" and this_file.parent.parent.name == "adapters":
         return this_file.parent.parent.parent
     
-    # Check if we are directly in the plugin root (e.g. flat copy)
+    # 3. Check if there is a marker in the parent directory (standard install layout)
+    marker = _read_plugin_root_marker(this_file.parent.parent)
+    if marker:
+        return marker
+
+    # Fallback to directory containing this file
     return this_file.parent
 
 
@@ -68,33 +76,47 @@ def get_source_root() -> Path:
 
 def find_rpc_server() -> str:
     """Find the rpc-server.js file."""
+    # Check plugin directory first (installed files)
+    plugin_dir = get_plugin_directory()
+    candidate = plugin_dir / "rpc-server.js"
+    if candidate.exists():
+        return str(candidate)
+
+    # Check root directory (source mode)
     root = get_plugin_root()
     candidate = root / "rpc-server.js"
     if candidate.exists():
         return str(candidate)
 
     raise FileNotFoundError(
-        f"Cannot find rpc-server.js in {root}. "
+        f"Cannot find rpc-server.js. "
         f"Please run 'npm run build' in the ClawAegis directory."
     )
 
 
 def find_web_api() -> str:
     """Find the web API entry point."""
+    # Check plugin directory first (installed files)
+    plugin_dir = get_plugin_directory()
+    candidate = plugin_dir / "web" / "index.js"
+    if candidate.exists():
+        return str(candidate)
+
+    # Check source layout
     root = get_plugin_root()
     
-    # Try api-hermes (specialized for Hermes)
-    candidate = root / "web" / "api-hermes" / "dist" / "index.js"
+    # Try generic web/api (standard layout)
+    candidate = root / "web" / "api" / "dist" / "index.js"
     if candidate.exists():
         return str(candidate)
         
-    # Try generic web/web (if it exists)
-    candidate = root / "web" / "index.js"
+    # Try api-hermes (specialized legacy for Hermes)
+    candidate = root / "web" / "api-hermes" / "dist" / "index.js"
     if candidate.exists():
         return str(candidate)
 
     raise FileNotFoundError(
-        f"Cannot find Web API in {root}/web. "
+        f"Cannot find Web API. "
         f"Please run 'npm run build' in the web directory."
     )
 

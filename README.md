@@ -1,5 +1,3 @@
-
-
 # ClawAegis
 
 <p align="center"> 
@@ -36,6 +34,8 @@ Through this layered, progressive mechanism, ClawAegis ensures that OpenClaw pos
 
 ## 🚀 Quick Start
 
+### For OpenClaw (Native)
+
 **1.** Clone ClawAegis:
 
 ```bash
@@ -69,6 +69,25 @@ openclaw plugins install ./ClawAegis
   "exfiltrationGuardMode": "enforce"
 }
 ```
+
+### For Hermes Agent (Python)
+
+**1.** Clone the repository:
+
+```bash
+git clone https://github.com/antgroup/ClawAegis.git
+```
+
+**2.** Run the automated installer:
+
+```bash
+cd ClawAegis
+bash adapters/hermes/install.sh
+```
+
+**3.** Configuration:
+
+Review and edit `~/.hermes/plugins/claw-aegis/config.yaml`.
 
 ---
 
@@ -137,7 +156,11 @@ ClawAegis includes a standalone Web management panel for visually configuring de
 
 ### Quick Start
 
-After installing the plugin, navigate to the plugin directory and start the WebUI:
+After installing the plugin, you can start the WebUI.
+
+**For OpenClaw users:**
+
+Navigate to the plugin directory and start the WebUI:
 
 ```bash
 # macOS / Linux
@@ -151,6 +174,15 @@ cd %USERPROFILE%\.openclaw\extensions\claw-aegis\web
 npm install
 npm run build
 npm start
+```
+
+**For Hermes users:**
+
+Use the standalone launcher script from the repository root:
+
+```bash
+cd ClawAegis
+./start-web-hermes.sh
 ```
 
 Open `http://localhost:3800` to access the management panel.

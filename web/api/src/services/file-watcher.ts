@@ -52,7 +52,7 @@ export class FileWatcher {
   ) {}
 
   async start(): Promise<void> {
-    const paths: string[] = [this.configService.getPluginJsonPath()];
+    const paths: string[] = [this.configService.getConfigPath()];
 
     if (this.stateService.isConfigured()) {
       paths.push(
