@@ -36,6 +36,7 @@ export function createClawAegisRuntime(
   warnIfPromptHooksDisabled(api);
 
   return {
+    engine,
     state: engine.state,
     scanService: engine.scanService,
     hooks: {

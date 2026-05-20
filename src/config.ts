@@ -138,6 +138,37 @@ export const clawAegisPluginConfigSchema = {
       type: "array",
       items: { type: "string" },
     },
+    probes: {
+      type: "object",
+      additionalProperties: false,
+      default: {},
+      properties: {
+        frida: {
+          type: "object",
+          additionalProperties: false,
+          default: {},
+          properties: {
+            enabled: { type: "boolean", default: false },
+            mode: { type: "string", enum: ["observe", "enforce"], default: "observe" },
+            enforceTimeoutMs: { type: "number", default: 200 },
+            targets: {
+              type: "array",
+              items: { type: "string", enum: ["execve", "openat", "connect"] },
+            },
+          },
+        },
+        ebpf: {
+          type: "object",
+          additionalProperties: false,
+          default: {},
+          properties: {
+            enabled: { type: "boolean", default: false },
+            pythonBin: { type: "string" },
+            runnerScript: { type: "string" },
+          },
+        },
+      },
+    },
     startupSkillScan: {
       type: "boolean",
       default: true,

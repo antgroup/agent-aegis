@@ -19,7 +19,8 @@
     "rpc-handlers.ts",
     "rpc-handlers.js",
     "rpc-server.ts",
-    "rpc-server.js"
+    "rpc-server.js",
+    "sentinel/"
   ],
   "openclaw": {
     "extensions": [
@@ -32,8 +33,11 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.9.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"
+  },
+  "optionalDependencies": {
+    "frida": "^16.0.0"
   }
 }

@@ -9,6 +9,6 @@
     "outDir": ".",
     "declaration": false
   },
-  "include": ["*.ts", "src/**/*.ts"],
-  "exclude": ["web", "node_modules", "adapters"]
+  "include": ["*.ts", "src/**/*.ts", "sentinel/**/*.ts"],
+  "exclude": ["web", "node_modules", "adapters", "sentinel/**/__tests__/**"]
 }
