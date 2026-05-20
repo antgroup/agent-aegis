@@ -30,7 +30,8 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "e2e:ebpf": "bash sentinel/probes/ebpf/verify-e2e.sh"
   },
   "devDependencies": {
     "@types/node": "^25.9.0",

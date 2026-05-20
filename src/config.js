@@ -119,6 +119,21 @@ export const clawAegisPluginConfigSchema = {
                 },
             },
         },
+        nativeJudge: {
+            type: "object",
+            additionalProperties: false,
+            default: {},
+            properties: {
+                sensitivePaths: {
+                    type: "array",
+                    items: { type: "string" },
+                },
+                scratchDirs: {
+                    type: "array",
+                    items: { type: "string" },
+                },
+            },
+        },
         startupSkillScan: {
             type: "boolean",
             default: true,

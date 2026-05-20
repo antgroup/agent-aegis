@@ -132,7 +132,21 @@ async function startSentinelForOpenClaw(
   const runtime = createOpenClawRuntime(api);
   const sentinel = startSentinel(runtime);
   sentinel.registerJudge(createL1BridgeJudge(engine));
-  sentinel.registerJudge(createNativeJudge());
+
+  let nativeCfg: ReturnType<typeof _internalReadNativeJudgeConfig> = {};
+  try {
+    nativeCfg = _internalReadNativeJudgeConfig(await runtime.readConfig());
+  } catch (err) {
+    api.logger.warn(
+      `[claw-aegis] native judge config read failed; using defaults: ${String(err)}`,
+    );
+  }
+  sentinel.registerJudge(
+    createNativeJudge({
+      sensitivePathPatterns: nativeCfg.sensitivePathPatterns,
+      scratchDirPatterns: nativeCfg.scratchDirPatterns,
+    }),
+  );
 
   try {
     const config = await runtime.readConfig();
@@ -198,6 +212,38 @@ function readEbpfConfig(config: Record<string, unknown>): {
   const pythonBin = typeof ebpf.pythonBin === "string" ? ebpf.pythonBin : undefined;
   const runnerScript = typeof ebpf.runnerScript === "string" ? ebpf.runnerScript : undefined;
   return { enabled, pythonBin, runnerScript };
+}
+
+/**
+ * Translate `userConfig.nativeJudge` into RegExp arrays for createNativeJudge.
+ * Strings are matched as literal substrings of the syscall path (escaped),
+ * with word boundary `\b` on each end so `/etc/shadow` doesn't accidentally
+ * match `/etc/shadow.bak`.
+ *
+ * Exported only for unit testing — not part of the public API.
+ */
+export function _internalReadNativeJudgeConfig(config: Record<string, unknown>): {
+  sensitivePathPatterns?: readonly RegExp[];
+  scratchDirPatterns?: readonly RegExp[];
+} {
+  const nj = (config.nativeJudge ?? {}) as Record<string, unknown>;
+  const sensitivePathPatterns = toRegexpList(nj.sensitivePaths, /* anchorStart */ false);
+  const scratchDirPatterns = toRegexpList(nj.scratchDirs, /* anchorStart */ true);
+  const out: ReturnType<typeof _internalReadNativeJudgeConfig> = {};
+  if (sensitivePathPatterns.length > 0) out.sensitivePathPatterns = sensitivePathPatterns;
+  if (scratchDirPatterns.length > 0) out.scratchDirPatterns = scratchDirPatterns;
+  return out;
+}
+
+function toRegexpList(raw: unknown, anchorStart: boolean): RegExp[] {
+  if (!Array.isArray(raw)) return [];
+  const out: RegExp[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "string" || entry.length === 0) continue;
+    const escaped = entry.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out.push(new RegExp(anchorStart ? `^${escaped}` : `${escaped}\\b`));
+  }
+  return out;
 }
 
 export default definePluginEntry({

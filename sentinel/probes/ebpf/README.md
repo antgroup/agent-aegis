@@ -55,6 +55,23 @@ loader translates `syscall` messages into `ProbeEvent`s.
 - `judgeKernelEscape` (filled in M5) flags execve of binaries launched from
   scratch directories (`/tmp`, `/dev/shm`, `/var/tmp`).
 
+## End-to-end verification
+
+A repeatable Linux-only smoke test lives next to the probe and proves the
+full pipeline (probe → judge → verdict → JSONL):
+
+```bash
+npm run build          # ensure .js artifacts exist
+npm run e2e:ebpf       # builds the Dockerfile here, runs verify-e2e.mjs
+```
+
+The wrapper script (`verify-e2e.sh`) builds the sibling `Dockerfile`,
+mounts the repo into the container, and runs `verify-e2e.mjs`. The test
+triggers `cat /etc/shadow` and asserts that the native judge produces a
+critical block verdict; non-zero exit means a regression in the pipeline.
+On macOS hosts you need Docker (OrbStack works) — eBPF cannot run on
+darwin directly.
+
 ## Scope reminder
 
 M5 is observe-only. Kernel-level enforce (LSM hooks) requires kernel 5.7+

@@ -136,6 +136,10 @@
       "help": "Legacy compatibility alias of protectedPaths. Extra directories that claw-aegis should treat as protected paths.",
       "advanced": true,
       "placeholder": "/path/to/protected"
+    },
+    "nativeJudge": {
+      "label": "L2/L3 Native Judge",
+      "help": "User-configurable patterns for the sentinel's native judge. 'sensitivePaths' triggers a critical block when any execve argv or openat path contains one of the substrings; 'scratchDirs' marks execve from those paths as kernel-escape."
     }
   },
   "configSchema": {
@@ -368,6 +372,24 @@
               "runnerScript": {
                 "type": "string"
               }
+            }
+          }
+        }
+      },
+      "nativeJudge": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "sensitivePaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scratchDirs": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         }
