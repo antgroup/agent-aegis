@@ -4,8 +4,12 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "resolvePackageJsonExports": true,
+    "declaration": true,
+    "outDir": ".",
+    "rootDir": ".",
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "exclude": ["web", "node_modules"]
+  "include": ["index.ts", "runtime-api.ts", "src/**/*.ts"],
+  "exclude": ["web", "node_modules", "**/__tests__/**", "**/*.test.ts"]
 }

@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { OpenClawPluginApi, OpenClawPluginConfigSchema } from "../runtime-api.js";
 
-export const CLAW_AEGIS_PLUGIN_ID = "claw-aegis";
+export const CLAW_AEGIS_PLUGIN_ID = "agent-aegis";
 export const DEFENSE_MODES = ["off", "observe", "enforce"] as const;
 
 export const TURN_STATE_TTL_MS = 5 * 60_000;

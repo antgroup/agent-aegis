@@ -1,7 +1,13 @@
 {
-  "id": "claw-aegis",
-  "name": "Claw Aegis",
-  "description": "Minimal safety guard plugin for OpenClaw prompt, tool, and tool-result flows.",
+  "id": "agent-aegis",
+  "name": "Agent Aegis",
+  "description": "Multi-layer runtime safety guard for OpenClaw agents (prompt, tool, tool-result, memory, skill, and output protection).",
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": []
+  },
   "uiHints": {
     "allDefensesEnabled": {
       "label": "Enable All Defenses",

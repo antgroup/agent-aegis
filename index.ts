@@ -15,7 +15,7 @@ export function wrapHookFailOpen(
       return await handler(event, ctx);
     } catch (error) {
       api.logger.error(
-        `[claw-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${
+        `[agent-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -68,7 +68,7 @@ export function registerClawAegisPlugin(
     api.on("session_end", wrapHookFailOpen(api, "session_end", runtime.hooks.session_end));
   } catch (error) {
     api.logger.error(
-      `[claw-aegis] register failed; fail-open keeps OpenClaw running: ${
+      `[agent-aegis] register failed; fail-open keeps OpenClaw running: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
@@ -76,9 +76,9 @@ export function registerClawAegisPlugin(
 }
 
 export default definePluginEntry({
-  id: "claw-aegis",
-  name: "Claw Aegis",
-  description: "Minimal safety guard plugin for prompt, tool, and tool-result hardening.",
+  id: "agent-aegis",
+  name: "Agent Aegis",
+  description: "Multi-layer runtime safety guard plugin for OpenClaw (prompt, tool, tool-result, memory, skill, and output protection).",
   configSchema: clawAegisPluginConfigDefinition,
   register(api: OpenClawPluginApi) {
     registerClawAegisPlugin(api);
