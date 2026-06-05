@@ -143,20 +143,6 @@ export const clawAegisPluginConfigSchema = {
       additionalProperties: false,
       default: {},
       properties: {
-        frida: {
-          type: "object",
-          additionalProperties: false,
-          default: {},
-          properties: {
-            enabled: { type: "boolean", default: false },
-            mode: { type: "string", enum: ["observe", "enforce"], default: "observe" },
-            enforceTimeoutMs: { type: "number", default: 200 },
-            targets: {
-              type: "array",
-              items: { type: "string", enum: ["execve", "openat", "connect"] },
-            },
-          },
-        },
         ebpf: {
           type: "object",
           additionalProperties: false,
@@ -165,6 +151,40 @@ export const clawAegisPluginConfigSchema = {
             enabled: { type: "boolean", default: false },
             pythonBin: { type: "string" },
             runnerScript: { type: "string" },
+            runnerBin: { type: "string" },
+          },
+        },
+        uprobe: {
+          type: "object",
+          additionalProperties: false,
+          default: {},
+          properties: {
+            enabled: { type: "boolean", default: false },
+            pythonBin: { type: "string" },
+            runnerScript: { type: "string" },
+            runnerBin: { type: "string" },
+            libcPath: { type: "string" },
+            opensslPath: { type: "string" },
+            targets: {
+              type: "array",
+              items: {
+                type: "string",
+                enum: ["execve", "openat", "connect", "SSL_write", "SSL_read"],
+              },
+            },
+          },
+        },
+        lsm: {
+          type: "object",
+          additionalProperties: false,
+          default: {},
+          properties: {
+            enabled: { type: "boolean", default: false },
+            runnerBin: { type: "string" },
+            policyTtlSeconds: { type: "number", default: 3600 },
+            maxEntries: { type: "number", default: 1024 },
+            minSeverity: { type: "string", enum: ["high", "critical"], default: "high" },
+            socketPath: { type: "string" },
           },
         },
       },

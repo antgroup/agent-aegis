@@ -7,7 +7,7 @@
  */
 export const EVENT_SCHEMA_VERSION = 1;
 
-export type ProbeEventSource = "frida" | "ebpf" | "l1-hook" | "test";
+export type ProbeEventSource = "ebpf" | "uprobe" | "lsm" | "l1-hook" | "test";
 
 export type VerdictAction = "allow" | "observe" | "block";
 

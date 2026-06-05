@@ -14,20 +14,26 @@ framework.
                    ┌─────────────────────────────────────────┐
                    │              SENTINEL CORE              │
                    │                                         │
-[Frida probe]      │   ProbeEventBus → ProbeEventStore       │      ┌───────────────────┐
-  (M4 / M4.5) ─────┼──► judges/    │  (JSONL daily-rotating) │──────►  L1 engine        │
+[ebpf tracepoint]  │   ProbeEventBus → ProbeEventStore       │      ┌───────────────────┐
+  (M5)         ────┼──► judges/    │  (JSONL daily-rotating) │──────►  L1 engine        │
                    │   Registry    │                         │      │  (src/engine.ts)  │
-[eBPF probe]       │      ↓        │                         │      └───────────────────┘
-  (M5) ────────────┼──► aggregator(strictest|weighted)       │
-                   │      ↓                                  │
-                   │   AggregatedVerdict → applyVerdict      │
-                   └────────────│────────────────────────────┘
-                                ↓
-                       AgentRuntime adapters
-                       ┌──────────┬──────────┐
-                       │ openclaw │  hermes  │
-                       └──────────┴──────────┘
+[uprobe]           │      ↓        │                         │      └───────────────────┘
+  (M7)         ────┼──► aggregator(strictest|weighted) ──► onVerdict subscribers ──┐
+                   │      ↓                                  │                     │
+                   │   AggregatedVerdict → applyVerdict      │                     │
+                   └────────────│────────────────────────────┘                     │
+                                ↓                                                  │
+                       AgentRuntime adapters                                       │
+                       ┌──────────┬──────────┐                                     │
+                       │ openclaw │  hermes  │                  [LSM enforce]      │
+                       └──────────┴──────────┘                    (M7.5)  ◄────────┘
+                                                              (kernel policy_map)
 ```
+
+A unified Go libbpf runner (M8, `probes/lsm/runner/dist/sentinel-runner`)
+handles all three eBPF modes via `--mode={ebpf,uprobe,lsm}`. The BCC Python
+runners under `probes/{ebpf,uprobe}/runner/probe.py` remain as fallbacks
+for early-dev environments without the toolchain to build the Go binary.
 
 ## Directory layout
 
@@ -100,10 +106,14 @@ this a build error).
 | M1 | `SENTINEL_M1_PLAN.md` | `channel/`, `judges/{base,aggregator}.ts`, `runtime/{types,noop-runtime}.ts`, `index.ts`, OpenClaw `index.ts` boot |
 | M2 | `SENTINEL_M2_PLAN.md` | `judges/l1-bridge.ts`, `judges/native.ts` (slot scaffolding + sensitive-path) |
 | M3 | `SENTINEL_M3_PLAN.md` | `runtime/adapters/openclaw.ts`, `src/handlers.ts` returns `engine` |
-| M4 | `SENTINEL_M4_PLAN.md` | `probes/types.ts`, `probes/frida/*`, `SentinelHandle.registerProbe`, optionalDependencies |
-| M4.5 | `SENTINEL_M4_5_PLAN.md` | `probes/frida/*` enforce-mode additions, `ProbeDeps.publish` returns verdict |
+| M4 | `SENTINEL_M4_PLAN.md` | Frida probe + enforce path (historical — removed in M9) |
+| M4.5 | `SENTINEL_M4_5_PLAN.md` | Frida enforce-mode (historical — removed in M9) |
 | M5 | `SENTINEL_M5_PLAN.md` | `probes/ebpf/*`, `judges/native.ts` slots filled |
 | M6 | `SENTINEL_M6_PLAN.md` | `runtime/adapters/hermes.ts`, this README |
+| M7 | `SENTINEL_M7_PLAN.md` | `probes/uprobe/*` — libc symbol observer; replaces Frida observation |
+| M7.5 | `SENTINEL_M7_5_PLAN.md` | `probes/lsm/*` — kernel LSM enforce; verdict→policy snapshot model; aggregator `onVerdict` |
+| M8 | `SENTINEL_M8_PLAN.md` | `probes/lsm/runner/*` — unified Go libbpf CO-RE runner (`--mode={ebpf,uprobe,lsm}`) |
+| M9 | `SENTINEL_M9_PLAN.md` | Frida deletion: `probes/frida/*` removed, `optionalDependencies.frida` dropped |
 
 Every modification is contained inside the listed directories — earlier
 milestone code is never edited beyond purely additive changes. If a
@@ -129,17 +139,31 @@ regression appears, the failing file path maps directly to a milestone.
 
 ```yaml
 probes:
-  frida:
-    enabled: false
-    mode: observe              # M4.5: "observe" | "enforce"
-    enforceTimeoutMs: 200      # M4.5: fail-open ceiling
-    targets: [execve, openat, connect]
   ebpf:
-    enabled: false             # M5, Linux only
+    enabled: false             # M5, Linux only — syscall tracepoints
+    pythonBin: /usr/bin/python3   # used when runnerScript runs the BCC fallback
+    runnerScript: null            # null → bundled probes/ebpf/runner/probe.py
+    runnerBin: null               # null → BCC path; else path to sentinel-runner
+  uprobe:
+    enabled: false             # M7, Linux only — libc / openssl symbol observer
+    libcPath: null                # null → auto-detect common distro paths
+    opensslPath: null             # required for SSL_write / SSL_read targets
+    targets: [execve, openat, connect]
     pythonBin: /usr/bin/python3
     runnerScript: null
+    runnerBin: null
+  lsm:
+    enabled: false             # M7.5, Linux ≥ 5.7 + CONFIG_BPF_LSM, in-kernel enforce
+    minSeverity: high             # "high" | "critical"
+    policyTtlSeconds: 3600
+    maxEntries: 1024
+    runnerBin: null               # null → probes/lsm/runner/dist/lsm-runner
 ```
 
 Everything defaults OFF. Sentinel's bare-bones presence in OpenClaw without
 any probe enabled is purely additive: it logs one `sentinel started: 0
-probes, 2 judges` line and otherwise does nothing.
+probes, N judges` line and otherwise does nothing.
+
+The legacy `probes.frida.*` block is accepted but no-op'd with a warn:
+Frida support was removed in M9. Migrate to `probes.uprobe` for observation
+and `probes.lsm` for enforcement.

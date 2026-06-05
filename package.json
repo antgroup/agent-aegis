@@ -31,14 +31,13 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e:ebpf": "bash sentinel/probes/ebpf/verify-e2e.sh"
+    "e2e:ebpf": "bash sentinel/probes/ebpf/verify-e2e.sh",
+    "e2e:uprobe": "bash sentinel/probes/uprobe/verify-e2e.sh",
+    "e2e:lsm": "bash sentinel/probes/lsm/verify-e2e.sh"
   },
   "devDependencies": {
     "@types/node": "^25.9.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"
-  },
-  "optionalDependencies": {
-    "frida": "^16.0.0"
   }
 }

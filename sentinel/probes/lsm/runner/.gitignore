@@ -1,0 +1,4 @@
+bpf/lsm.bpf.o
+bpf/vmlinux.h
+dist/
+go.sum

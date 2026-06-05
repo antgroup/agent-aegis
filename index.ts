@@ -5,7 +5,8 @@ import { startSentinel, type SentinelHandle } from "./sentinel/index.js";
 import { createL1BridgeJudge } from "./sentinel/judges/l1-bridge.js";
 import { createNativeJudge } from "./sentinel/judges/native.js";
 import { createEbpfProbe } from "./sentinel/probes/ebpf/index.js";
-import { createFridaProbe, type FridaHookTarget } from "./sentinel/probes/frida/index.js";
+import { createUprobeProbe, type UprobeHookTarget } from "./sentinel/probes/uprobe/index.js";
+import { createLsmProbe, type LsmMinSeverity } from "./sentinel/probes/lsm/index.js";
 import { createOpenClawRuntime } from "./sentinel/runtime/adapters/openclaw.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- handlers have heterogeneous signatures; `any` is needed for contravariance
@@ -121,9 +122,14 @@ export function registerClawAegisPlugin(
  *   - native:    handles syscall events that L1 cannot see (e.g. /etc/shadow
  *     access via execve). Lights up the moment a probe lands.
  *
- * Probes (opt-in):
- *   - frida:     attached only when `probes.frida.enabled === true` in user
- *                config. Always logs a warn on failure rather than throwing.
+ * Probes (opt-in, Linux only):
+ *   - ebpf:    syscall tracepoint observer (M5 / system-wide)
+ *   - uprobe:  user-space libc/openssl symbol observer (M7)
+ *   - lsm:     in-kernel enforce — denies high-severity verdicts (M7.5)
+ *
+ * All probes log a warn on failure rather than throwing. A legacy
+ * `probes.frida.*` block in user config is accepted but no-op'd with a warn —
+ * Frida support was removed in M9.
  */
 async function startSentinelForOpenClaw(
   api: OpenClawPluginApi,
@@ -150,22 +156,40 @@ async function startSentinelForOpenClaw(
 
   try {
     const config = await runtime.readConfig();
-    const fridaCfg = readFridaConfig(config);
-    if (fridaCfg.enabled) {
-      await sentinel.registerProbe(
-        createFridaProbe({
-          targets: fridaCfg.targets,
-          mode: fridaCfg.mode,
-          enforceTimeoutMs: fridaCfg.enforceTimeoutMs,
-        }),
-      );
-    }
+    warnIfLegacyFrida(config, api);
     const ebpfCfg = readEbpfConfig(config);
     if (ebpfCfg.enabled) {
       await sentinel.registerProbe(
         createEbpfProbe({
           pythonBin: ebpfCfg.pythonBin,
           runnerScript: ebpfCfg.runnerScript,
+          runnerBin: ebpfCfg.runnerBin,
+        }),
+      );
+    }
+    const uprobeCfg = readUprobeConfig(config);
+    if (uprobeCfg.enabled) {
+      await sentinel.registerProbe(
+        createUprobeProbe({
+          pythonBin: uprobeCfg.pythonBin,
+          runnerScript: uprobeCfg.runnerScript,
+          runnerBin: uprobeCfg.runnerBin,
+          targets: uprobeCfg.targets,
+          libcPath: uprobeCfg.libcPath,
+          opensslPath: uprobeCfg.opensslPath,
+        }),
+      );
+    }
+    const lsmCfg = readLsmConfig(config);
+    if (lsmCfg.enabled) {
+      await sentinel.registerProbe(
+        createLsmProbe({
+          runnerBin: lsmCfg.runnerBin,
+          policyTtlSeconds: lsmCfg.policyTtlSeconds,
+          maxEntries: lsmCfg.maxEntries,
+          minSeverity: lsmCfg.minSeverity,
+          socketPath: lsmCfg.socketPath,
+          stateDir: runtime.getStateDir(),
         }),
       );
     }
@@ -178,40 +202,85 @@ async function startSentinelForOpenClaw(
   return sentinel;
 }
 
-function readFridaConfig(config: Record<string, unknown>): {
-  enabled: boolean;
-  targets?: ReadonlyArray<FridaHookTarget>;
-  mode?: "observe" | "enforce";
-  enforceTimeoutMs?: number;
-} {
+function warnIfLegacyFrida(config: Record<string, unknown>, api: OpenClawPluginApi): void {
   const probes = (config.probes ?? {}) as Record<string, unknown>;
-  const frida = (probes.frida ?? {}) as Record<string, unknown>;
-  const enabled = frida.enabled === true;
-  const rawTargets = frida.targets;
-  const targets: FridaHookTarget[] | undefined = Array.isArray(rawTargets)
-    ? (rawTargets.filter(
-        (t): t is FridaHookTarget => t === "execve" || t === "openat" || t === "connect",
-      ) as FridaHookTarget[])
-    : undefined;
-  const mode = frida.mode === "enforce" ? "enforce" : frida.mode === "observe" ? "observe" : undefined;
-  const enforceTimeoutMs =
-    typeof frida.enforceTimeoutMs === "number" && frida.enforceTimeoutMs > 0
-      ? frida.enforceTimeoutMs
-      : undefined;
-  return { enabled, targets, mode, enforceTimeoutMs };
+  const frida = probes.frida as Record<string, unknown> | undefined;
+  if (frida && frida.enabled === true) {
+    api.logger.warn(
+      `[claw-aegis] probes.frida is removed in M9. Falling back silently. ` +
+        `Migrate to probes.uprobe + probes.lsm — see SENTINEL_M9_PLAN.md.`,
+    );
+  }
 }
 
 function readEbpfConfig(config: Record<string, unknown>): {
   enabled: boolean;
   pythonBin?: string;
   runnerScript?: string;
+  runnerBin?: string;
 } {
   const probes = (config.probes ?? {}) as Record<string, unknown>;
   const ebpf = (probes.ebpf ?? {}) as Record<string, unknown>;
   const enabled = ebpf.enabled === true;
   const pythonBin = typeof ebpf.pythonBin === "string" ? ebpf.pythonBin : undefined;
   const runnerScript = typeof ebpf.runnerScript === "string" ? ebpf.runnerScript : undefined;
-  return { enabled, pythonBin, runnerScript };
+  const runnerBin = typeof ebpf.runnerBin === "string" ? ebpf.runnerBin : undefined;
+  return { enabled, pythonBin, runnerScript, runnerBin };
+}
+
+function readUprobeConfig(config: Record<string, unknown>): {
+  enabled: boolean;
+  pythonBin?: string;
+  runnerScript?: string;
+  runnerBin?: string;
+  targets?: ReadonlyArray<UprobeHookTarget>;
+  libcPath?: string;
+  opensslPath?: string;
+} {
+  const probes = (config.probes ?? {}) as Record<string, unknown>;
+  const u = (probes.uprobe ?? {}) as Record<string, unknown>;
+  const enabled = u.enabled === true;
+  const pythonBin = typeof u.pythonBin === "string" ? u.pythonBin : undefined;
+  const runnerScript = typeof u.runnerScript === "string" ? u.runnerScript : undefined;
+  const runnerBin = typeof u.runnerBin === "string" ? u.runnerBin : undefined;
+  const libcPath = typeof u.libcPath === "string" ? u.libcPath : undefined;
+  const opensslPath = typeof u.opensslPath === "string" ? u.opensslPath : undefined;
+  const rawTargets = u.targets;
+  const targets: UprobeHookTarget[] | undefined = Array.isArray(rawTargets)
+    ? (rawTargets.filter(
+        (t): t is UprobeHookTarget =>
+          t === "execve" ||
+          t === "openat" ||
+          t === "connect" ||
+          t === "SSL_write" ||
+          t === "SSL_read",
+      ) as UprobeHookTarget[])
+    : undefined;
+  return { enabled, pythonBin, runnerScript, runnerBin, targets, libcPath, opensslPath };
+}
+
+function readLsmConfig(config: Record<string, unknown>): {
+  enabled: boolean;
+  runnerBin?: string;
+  policyTtlSeconds?: number;
+  maxEntries?: number;
+  minSeverity?: LsmMinSeverity;
+  socketPath?: string;
+} {
+  const probes = (config.probes ?? {}) as Record<string, unknown>;
+  const l = (probes.lsm ?? {}) as Record<string, unknown>;
+  const enabled = l.enabled === true;
+  const runnerBin = typeof l.runnerBin === "string" ? l.runnerBin : undefined;
+  const policyTtlSeconds =
+    typeof l.policyTtlSeconds === "number" && l.policyTtlSeconds > 0
+      ? l.policyTtlSeconds
+      : undefined;
+  const maxEntries =
+    typeof l.maxEntries === "number" && l.maxEntries > 0 ? l.maxEntries : undefined;
+  const minSeverity: LsmMinSeverity | undefined =
+    l.minSeverity === "high" || l.minSeverity === "critical" ? l.minSeverity : undefined;
+  const socketPath = typeof l.socketPath === "string" ? l.socketPath : undefined;
+  return { enabled, runnerBin, policyTtlSeconds, maxEntries, minSeverity, socketPath };
 }
 
 /**

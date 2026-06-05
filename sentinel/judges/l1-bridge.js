@@ -2,7 +2,7 @@ const JUDGE_ID = "l1-bridge";
 /**
  * A Judge that delegates to the existing L1 engine for `tool_call` events.
  *
- * Probe-originated events (Frida/eBPF) are NOT routed through L1 — those go
+ * Probe-originated events (eBPF / uprobe / LSM) are NOT routed through L1 — those go
  * to the native judge, which knows how to read syscall args. L1 was designed
  * around tool-call intent and has no concept of an `execve`/`openat` event.
  */

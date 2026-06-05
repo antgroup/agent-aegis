@@ -17,7 +17,7 @@ function stubEngine(
 describe("createL1BridgeJudge", () => {
   it("abstains on non-tool_call syscalls", async () => {
     const judge = createL1BridgeJudge(stubEngine({ block: true, reason: "x" }));
-    const ev = createProbeEvent({ source: "frida", syscall: "execve", pid: 1, args: { argv: ["x"] } });
+    const ev = createProbeEvent({ source: "uprobe", syscall: "execve", pid: 1, args: { argv: ["x"] } });
     expect(await judge.judge(ev)).toBeNull();
   });
 

@@ -17,6 +17,7 @@ export function startSentinel(runtime, opts = {}) {
     });
     const registry = new JudgeRegistry();
     const probes = [];
+    const verdictSubscribers = new Set();
     // Persistence subscriber: every published event lands in JSONL.
     bus.subscribe((event) => {
         try {
@@ -67,6 +68,14 @@ export function startSentinel(runtime, opts = {}) {
             logger.error(`[sentinel] failed to persist verdict for ${event.id}: ${String(err)}`);
         }
         runtime.onSentinelEvent?.(event, aggregated);
+        for (const cb of verdictSubscribers) {
+            try {
+                cb(aggregated);
+            }
+            catch (err) {
+                logger.warn(`[sentinel] verdict subscriber threw: ${String(err)}`);
+            }
+        }
         return aggregated;
     }
     const probeDeps = {
@@ -74,6 +83,12 @@ export function startSentinel(runtime, opts = {}) {
         publish: async (event) => {
             bus.publish(event);
             return processEvent(event);
+        },
+        onVerdict: (cb) => {
+            verdictSubscribers.add(cb);
+            return () => {
+                verdictSubscribers.delete(cb);
+            };
         },
     };
     let stopped = false;

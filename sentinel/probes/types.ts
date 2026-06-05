@@ -6,7 +6,7 @@ import type { AgentRuntime } from "../runtime/types.js";
  *
  * The probe should NOT capture references to anything else inside the
  * sentinel — sticking to these two surfaces keeps probes drop-in replaceable
- * (M4 Frida, M5 eBPF, future userspace tracers).
+ * (ebpf tracepoint, uprobe, LSM enforce, future probes).
  */
 export interface ProbeDeps {
   readonly runtime: AgentRuntime;
@@ -14,10 +14,18 @@ export interface ProbeDeps {
    * Publish an event through the sentinel pipeline. Returns the aggregated
    * verdict (or null when no judges are registered / all abstained).
    *
-   * Observe-mode probes may ignore the returned value; M4.5 enforce-mode
-   * relies on it for the agent-side deny path.
+   * Observe-mode probes may ignore the returned value.
    */
   publish: (event: ProbeEvent) => Promise<AggregatedVerdict | null>;
+  /**
+   * Subscribe to every aggregated verdict the sentinel emits — regardless of
+   * which probe sourced the original event. Returns an unsubscribe function.
+   *
+   * Used by enforce-side probes (M7.5 LSM): translate high-severity deny
+   * verdicts into kernel policy entries so subsequent matching syscalls are
+   * blocked in-kernel.
+   */
+  onVerdict: (cb: (verdict: AggregatedVerdict) => void) => () => void;
 }
 
 /**

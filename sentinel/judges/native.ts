@@ -5,14 +5,14 @@ import type { Judge } from "./base.js";
  * Native L2/L3 judge — defends against scenarios that L1 cannot see.
  *
  * L1 operates on agent-level tool-call intent. The native judge operates on
- * raw syscall events captured by Frida (M4) and eBPF (M5), so it can catch
+ * raw syscall events captured by the eBPF tracepoint/uprobe/LSM probes, so it can catch
  * things like obfuscated `execve` payloads, sub-process file access bypasses,
  * and direct kernel-level exfiltration that never go through the agent's
  * tool registry.
  *
  * M2 ships the structural skeleton plus one demo rule (sensitive-path access
  * via `execve`) so that the multi-judge pipeline can be exercised end-to-end
- * the moment the Frida probe lands in M4. The other slots (kernel-escape,
+ * the moment any syscall probe lands. The other slots (kernel-escape,
  * process-tree anomaly) are intentional placeholders.
  */
 
@@ -70,7 +70,12 @@ export function createNativeJudge(opts: NativeJudgeOptions = {}): Judge {
     id: JUDGE_ID,
     async judge(event: ProbeEvent): Promise<Verdict | null> {
       // Probe-sourced syscalls only. Tool-call events belong to L1.
-      if (event.source !== "frida" && event.source !== "ebpf" && event.source !== "test") {
+      if (
+        event.source !== "ebpf" &&
+        event.source !== "uprobe" &&
+        event.source !== "lsm" &&
+        event.source !== "test"
+      ) {
         return null;
       }
 
@@ -120,7 +125,7 @@ function judgeSensitivePath(
         return {
           action: "block",
           severity: "critical",
-          reason: `native: sensitive path access blocked (${pattern.source})`,
+          reason: `native: sensitive path access blocked (${pattern.source}); path=${haystack}`,
           judgeId: `${JUDGE_ID}:sensitive-path`,
           confidence: 1,
           sideEffects: [
@@ -161,7 +166,7 @@ function judgeKernelEscape(
       return {
         action: "block",
         severity: "high",
-        reason: `native: execve from scratch dir blocked (${pattern.source}): ${launchPath}`,
+        reason: `native: execve from scratch dir blocked (${pattern.source}); path=${launchPath}`,
         judgeId: `${JUDGE_ID}:kernel-escape`,
         confidence: 0.9,
         sideEffects: [
@@ -190,8 +195,8 @@ function readLaunchPath(event: ProbeEvent): string | undefined {
  * process tree. Always `observe` (never `block`) — false-positive risk is
  * non-trivial because legitimate agents do spawn detached helpers.
  *
- * Sources of ppid: eBPF probe sets `event.meta.ppid`. Frida cannot supply
- * this in M4 (in-process attach), so the rule effectively only fires on
+ * Sources of ppid: eBPF / uprobe / LSM probes set `event.meta.ppid` when the
+ * kernel tracepoint exposes it, so the rule effectively only fires on
  * eBPF events.
  */
 function judgeProcessTreeAnomaly(

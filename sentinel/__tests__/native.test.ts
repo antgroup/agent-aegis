@@ -17,7 +17,7 @@ describe("createNativeJudge", () => {
   it("abstains when execve argv is missing or malformed", async () => {
     const judge = createNativeJudge();
     const ev = createProbeEvent({
-      source: "frida",
+      source: "uprobe",
       syscall: "execve",
       pid: 100,
       args: { not_argv: "x" },
@@ -28,7 +28,7 @@ describe("createNativeJudge", () => {
   it("blocks execve whose argv touches /etc/shadow", async () => {
     const judge = createNativeJudge();
     const ev = createProbeEvent({
-      source: "frida",
+      source: "uprobe",
       syscall: "execve",
       pid: 100,
       args: { argv: ["/bin/cat", "/etc/shadow"] },
@@ -74,7 +74,7 @@ describe("createNativeJudge", () => {
     });
     const blocked = await judge.judge(
       createProbeEvent({
-        source: "frida",
+        source: "uprobe",
         syscall: "execve",
         pid: 300,
         args: { argv: ["/usr/bin/python", "-c", "open('/srv/secrets/db.key')"] },
