@@ -1,6 +1,6 @@
-name: claw-aegis
+name: agent-aegis
 version: 1.0.0
-description: "Runtime security plugin — defense-in-depth for Hermes Agent (powered by ClawAegis)"
+description: "Runtime security plugin — defense-in-depth for Hermes Agent (powered by AgentAegis)"
 author: QYQClaw
 license: MIT
 

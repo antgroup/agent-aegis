@@ -110,56 +110,56 @@ const APPLY_PATCH_MARKERS = [
     "*** Update File: ",
     "*** Move to: ",
 ];
-const CLAW_AEGIS_REFERENCE_PATTERNS = [
-    /(?:^|[^A-Za-z0-9_-])claw-aegis(?:$|[^A-Za-z0-9_-])/i,
-    /~\/\.openclaw\/extensions\/claw-aegis/i,
-    /\bplugins\.entries\.(?:\[["']claw-aegis["']\]|claw-aegis)\b/i,
-    /(?:安全插件|安全扩展).{0,24}claw-aegis/i,
+const AGENT_AEGIS_REFERENCE_PATTERNS = [
+    /(?:^|[^A-Za-z0-9_-])agent-aegis(?:$|[^A-Za-z0-9_-])/i,
+    /~\/\.openclaw\/extensions\/agent-aegis/i,
+    /\bplugins\.entries\.(?:\[["']agent-aegis["']\]|agent-aegis)\b/i,
+    /(?:安全插件|安全扩展).{0,24}agent-aegis/i,
 ];
-const CLAW_AEGIS_QUERY_ACTION_PATTERNS = [
+const AGENT_AEGIS_QUERY_ACTION_PATTERNS = [
     /\b(?:inspect|read|view|show|display|print|cat|less|more|head|tail|list|ls|tree|find|search|query|grep|rg|ripgrep|locate|whereis|get)\b/i,
     /(?:查看|读取|访问|显示|打印|列出|搜索|查找|检索|定位|查询)/i,
 ];
-const CLAW_AEGIS_QUERY_ACTION_COMPACT_PATTERNS = [
+const AGENT_AEGIS_QUERY_ACTION_COMPACT_PATTERNS = [
     /(?:inspect|read|view|show|display|print|cat|less|more|head|tail|list|tree|find|search|query|grep|ripgrep|locate|whereis)/i,
     /(?:查看|读取|访问|显示|打印|列出|搜索|查找|检索|定位|查询)/i,
 ];
-const CLAW_AEGIS_MUTATION_ACTION_PATTERNS = [
+const AGENT_AEGIS_MUTATION_ACTION_PATTERNS = [
     /\b(?:edit|modify|change|update|overwrite|write|move|copy|rename|archive|zip|tar|upload|delete|remove|rm|unlink|chmod|chown|set)\b/i,
     /(?:修改|编辑|更改|更新|覆盖|写入|移动|复制|重命名|打包|上传|删除|移除|设置)/i,
 ];
-const CLAW_AEGIS_MUTATION_ACTION_COMPACT_PATTERNS = [
+const AGENT_AEGIS_MUTATION_ACTION_COMPACT_PATTERNS = [
     /(?:edit|modify|change|update|overwrite|write|move|copy|rename|archive|zip|tar|upload|delete|remove|unlink|chmod|chown)/i,
     /(?:修改|编辑|更改|更新|覆盖|写入|移动|复制|重命名|打包|上传|删除|移除|设置)/i,
 ];
-const CLAW_AEGIS_DISABLE_ACTION_PATTERNS = [
+const AGENT_AEGIS_DISABLE_ACTION_PATTERNS = [
     /\b(?:disable|ignore|bypass|turn off|shut down|close|stop|uninstall|remove)\b/i,
     /(?:禁用|忽略|绕过|关闭|停用|停止|卸载|移除)/i,
 ];
-const CLAW_AEGIS_DISABLE_ACTION_COMPACT_PATTERNS = [
+const AGENT_AEGIS_DISABLE_ACTION_COMPACT_PATTERNS = [
     /(?:disable|ignore|bypass|turnoff|shutdown|close|stop|uninstall|remove)/i,
     /(?:禁用|忽略|绕过|关闭|停用|停止|卸载|移除)/i,
 ];
-const CLAW_AEGIS_CONFIG_TAMPER_PATTERNS = [
-    /\bplugins\.entries\.(?:\[["']claw-aegis["']\]|claw-aegis)\b/i,
-    /["']claw-aegis["']\s*:\s*\{/i,
+const AGENT_AEGIS_CONFIG_TAMPER_PATTERNS = [
+    /\bplugins\.entries\.(?:\[["']agent-aegis["']\]|agent-aegis)\b/i,
+    /["']agent-aegis["']\s*:\s*\{/i,
 ];
-const CLAW_AEGIS_CONFIG_TAMPER_COMPACT_PATTERNS = [/pluginsentriesclawaegis/i];
-const CLAW_AEGIS_CONFIG_DISABLE_PATTERNS = [
+const AGENT_AEGIS_CONFIG_TAMPER_COMPACT_PATTERNS = [/pluginsentriesagentaegis/i];
+const AGENT_AEGIS_CONFIG_DISABLE_PATTERNS = [
     /\b(?:enabled|allowPromptInjection)\b\s*[:=]\s*false\b/i,
     /\bopenclaw\s+config\s+(?:set|unset)\b/i,
 ];
-const CLAW_AEGIS_CONFIG_DISABLE_COMPACT_PATTERNS = [
+const AGENT_AEGIS_CONFIG_DISABLE_COMPACT_PATTERNS = [
     /(?:enabled|allowpromptinjection)false/i,
     /openclawconfig(?:set|unset)/i,
 ];
-const CLAW_AEGIS_CONFIG_QUERY_PATTERNS = [/\bopenclaw\s+config\s+get\b/i];
-const CLAW_AEGIS_CONFIG_QUERY_COMPACT_PATTERNS = [/openclawconfigget/i];
+const AGENT_AEGIS_CONFIG_QUERY_PATTERNS = [/\bopenclaw\s+config\s+get\b/i];
+const AGENT_AEGIS_CONFIG_QUERY_COMPACT_PATTERNS = [/openclawconfigget/i];
 const SENSITIVE_PROTECTED_PATH_PATTERNS = [
     /(?:^|\/)\.ssh(?:\/|$)/i,
     /(?:^|\/)\.antconfig(?:\/|$)/i,
     /(?:^|\/)\.openclaw\/openclaw\.json(?:$|[/*?])/i,
-    /(?:^|\/)\.openclaw\/extensions\/claw-aegis(?:\/|$|[/*?])/i,
+    /(?:^|\/)\.openclaw\/extensions\/agent-aegis(?:\/|$|[/*?])/i,
     // shell 配置文件（防止重定向截断攻击）
     /(?:^|\/)\.(?:bashrc|zshrc|bash_profile|zprofile|profile|bash_login|zshenv)(?:$|[/*?])/i,
 ];
@@ -169,7 +169,7 @@ const SENSITIVE_PATH_TEXT_PATTERNS = [
     /\/\.openclaw\/openclaw\.json(?:[^a-z0-9_]|$)/i,
     // ~/ 前缀形式（expandHomeLike 只处理字符串开头，整句文本中的 ~ 不会展开）
     /~\/\.openclaw\/openclaw\.json(?:[^a-z0-9_]|$)/i,
-    /\/\.openclaw\/extensions\/claw-aegis(?:[^a-z0-9_-]|$)/i,
+    /\/\.openclaw\/extensions\/agent-aegis(?:[^a-z0-9_-]|$)/i,
     // .openclaw/agents/ 目录（含 models.json 等 agent 配置）
     /\/\.openclaw\/agents\//i,
     /(?:^|[^a-z0-9_])\.openclaw\/agents(?:[^a-z0-9_-]|$)/i,
@@ -945,9 +945,9 @@ function mentionsSensitivePathTarget(text) {
 }
 function hasSensitivePathOperation(text) {
     const variants = buildGuardTextVariants(text);
-    return (matchesVariantPatterns(variants, CLAW_AEGIS_QUERY_ACTION_PATTERNS, CLAW_AEGIS_QUERY_ACTION_COMPACT_PATTERNS) ||
-        matchesVariantPatterns(variants, CLAW_AEGIS_MUTATION_ACTION_PATTERNS, CLAW_AEGIS_MUTATION_ACTION_COMPACT_PATTERNS) ||
-        matchesVariantPatterns(variants, CLAW_AEGIS_DISABLE_ACTION_PATTERNS, CLAW_AEGIS_DISABLE_ACTION_COMPACT_PATTERNS));
+    return (matchesVariantPatterns(variants, AGENT_AEGIS_QUERY_ACTION_PATTERNS, AGENT_AEGIS_QUERY_ACTION_COMPACT_PATTERNS) ||
+        matchesVariantPatterns(variants, AGENT_AEGIS_MUTATION_ACTION_PATTERNS, AGENT_AEGIS_MUTATION_ACTION_COMPACT_PATTERNS) ||
+        matchesVariantPatterns(variants, AGENT_AEGIS_DISABLE_ACTION_PATTERNS, AGENT_AEGIS_DISABLE_ACTION_COMPACT_PATTERNS));
 }
 function matchesProtectedPathTarget(candidatePath, protectedRoots) {
     return (isSensitiveProtectedPath(candidatePath) ||
@@ -1116,15 +1116,15 @@ function buildMemoryWriteText(toolName, params) {
     }
     return undefined;
 }
-function mentionsClawAegisReference(text) {
+function mentionsAgentAegisReference(text) {
     const variants = buildGuardTextVariants(text);
-    return (CLAW_AEGIS_REFERENCE_PATTERNS.some((pattern) => pattern.test(variants.raw) || pattern.test(variants.normalized)) || variants.compact.includes("clawaegis"));
+    return (AGENT_AEGIS_REFERENCE_PATTERNS.some((pattern) => pattern.test(variants.raw) || pattern.test(variants.normalized)) || variants.compact.includes("agentaegis"));
 }
 function hasSelfProtectionAction(text) {
     const variants = buildGuardTextVariants(text);
-    return (matchesVariantPatterns(variants, CLAW_AEGIS_QUERY_ACTION_PATTERNS, CLAW_AEGIS_QUERY_ACTION_COMPACT_PATTERNS) ||
-        matchesVariantPatterns(variants, CLAW_AEGIS_MUTATION_ACTION_PATTERNS, CLAW_AEGIS_MUTATION_ACTION_COMPACT_PATTERNS) ||
-        matchesVariantPatterns(variants, CLAW_AEGIS_DISABLE_ACTION_PATTERNS, CLAW_AEGIS_DISABLE_ACTION_COMPACT_PATTERNS));
+    return (matchesVariantPatterns(variants, AGENT_AEGIS_QUERY_ACTION_PATTERNS, AGENT_AEGIS_QUERY_ACTION_COMPACT_PATTERNS) ||
+        matchesVariantPatterns(variants, AGENT_AEGIS_MUTATION_ACTION_PATTERNS, AGENT_AEGIS_MUTATION_ACTION_COMPACT_PATTERNS) ||
+        matchesVariantPatterns(variants, AGENT_AEGIS_DISABLE_ACTION_PATTERNS, AGENT_AEGIS_DISABLE_ACTION_COMPACT_PATTERNS));
 }
 function normalizeProtectedIdentifier(value) {
     return compactGuardText(normalizeGuardText(value));
@@ -1176,20 +1176,20 @@ function mentionsProtectedPluginTarget(text, protectedPluginIds) {
 }
 function hasMutationOrDeleteAction(text) {
     const variants = buildGuardTextVariants(text);
-    return (matchesVariantPatterns(variants, CLAW_AEGIS_MUTATION_ACTION_PATTERNS, CLAW_AEGIS_MUTATION_ACTION_COMPACT_PATTERNS) ||
-        matchesVariantPatterns(variants, CLAW_AEGIS_DISABLE_ACTION_PATTERNS, CLAW_AEGIS_DISABLE_ACTION_COMPACT_PATTERNS));
+    return (matchesVariantPatterns(variants, AGENT_AEGIS_MUTATION_ACTION_PATTERNS, AGENT_AEGIS_MUTATION_ACTION_COMPACT_PATTERNS) ||
+        matchesVariantPatterns(variants, AGENT_AEGIS_DISABLE_ACTION_PATTERNS, AGENT_AEGIS_DISABLE_ACTION_COMPACT_PATTERNS));
 }
-function matchesClawAegisConfigTamper(text) {
+function matchesAgentAegisConfigTamper(text) {
     const variants = buildGuardTextVariants(text);
-    const hasConfigReference = matchesVariantPatterns(variants, CLAW_AEGIS_CONFIG_TAMPER_PATTERNS, CLAW_AEGIS_CONFIG_TAMPER_COMPACT_PATTERNS);
+    const hasConfigReference = matchesVariantPatterns(variants, AGENT_AEGIS_CONFIG_TAMPER_PATTERNS, AGENT_AEGIS_CONFIG_TAMPER_COMPACT_PATTERNS);
     if (!hasConfigReference) {
         return false;
     }
-    return (matchesVariantPatterns(variants, CLAW_AEGIS_CONFIG_DISABLE_PATTERNS, CLAW_AEGIS_CONFIG_DISABLE_COMPACT_PATTERNS) ||
-        matchesVariantPatterns(variants, CLAW_AEGIS_CONFIG_QUERY_PATTERNS, CLAW_AEGIS_CONFIG_QUERY_COMPACT_PATTERNS) ||
-        matchesVariantPatterns(variants, CLAW_AEGIS_QUERY_ACTION_PATTERNS, CLAW_AEGIS_QUERY_ACTION_COMPACT_PATTERNS) ||
-        matchesVariantPatterns(variants, CLAW_AEGIS_MUTATION_ACTION_PATTERNS, CLAW_AEGIS_MUTATION_ACTION_COMPACT_PATTERNS) ||
-        matchesVariantPatterns(variants, CLAW_AEGIS_DISABLE_ACTION_PATTERNS, CLAW_AEGIS_DISABLE_ACTION_COMPACT_PATTERNS));
+    return (matchesVariantPatterns(variants, AGENT_AEGIS_CONFIG_DISABLE_PATTERNS, AGENT_AEGIS_CONFIG_DISABLE_COMPACT_PATTERNS) ||
+        matchesVariantPatterns(variants, AGENT_AEGIS_CONFIG_QUERY_PATTERNS, AGENT_AEGIS_CONFIG_QUERY_COMPACT_PATTERNS) ||
+        matchesVariantPatterns(variants, AGENT_AEGIS_QUERY_ACTION_PATTERNS, AGENT_AEGIS_QUERY_ACTION_COMPACT_PATTERNS) ||
+        matchesVariantPatterns(variants, AGENT_AEGIS_MUTATION_ACTION_PATTERNS, AGENT_AEGIS_MUTATION_ACTION_COMPACT_PATTERNS) ||
+        matchesVariantPatterns(variants, AGENT_AEGIS_DISABLE_ACTION_PATTERNS, AGENT_AEGIS_DISABLE_ACTION_COMPACT_PATTERNS));
 }
 function isOpenClawConfigPath(candidatePath) {
     return path.basename(candidatePath).toLowerCase() === "openclaw.json";
@@ -1659,10 +1659,10 @@ export function resolveSelfProtectionTextViolation(toolName, params, candidatePa
         "trash",
     ]);
     const toolImpliesMutationAccess = mutationLikeTool.has(normalizedTool) && normalizedTool !== "exec" && normalizedTool !== "bash";
-    if (texts.some((text) => mentionsClawAegisReference(text) && hasSelfProtectionAction(text))) {
+    if (texts.some((text) => mentionsAgentAegisReference(text) && hasSelfProtectionAction(text))) {
         return BLOCK_REASON_PROTECTED_PATH;
     }
-    if (texts.some((text) => matchesClawAegisConfigTamper(text)) &&
+    if (texts.some((text) => matchesAgentAegisConfigTamper(text)) &&
         (mutationLikeTool.has(normalizedTool) ||
             queryLikeTool.has(normalizedTool) ||
             candidatePaths.some((candidate) => isOpenClawConfigPath(candidate)))) {

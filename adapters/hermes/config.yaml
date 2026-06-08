@@ -1,4 +1,4 @@
-# ClawAegis configuration for Hermes Agent.
+# AgentAegis configuration for Hermes Agent.
 # All defenses are enabled by default in enforce mode.
 # Set a defense to false or its mode to "observe"/"off" to adjust.
 

@@ -1,7 +1,7 @@
 """
-Path resolution for ClawAegis Hermes adapter.
+Path resolution for AgentAegis Hermes adapter.
 
-This module handles finding ClawAegis files in multiple locations:
+This module handles finding AgentAegis files in multiple locations:
 1. Plugin directory (for installed/standalone mode)
 2. Source repository (for development mode or direct GitHub install)
 """
@@ -14,16 +14,16 @@ from typing import Optional
 
 
 # Marker file that indicates the plugin directory
-CLAWAEGIS_ROOT_MARKER = ".clawaegis-root"
+AGENTAEGIS_ROOT_MARKER = ".agentaegis-root"
 
 
 def get_plugin_root() -> Path:
-    """Get the root directory of the ClawAegis repository/plugin.
+    """Get the root directory of the AgentAegis repository/plugin.
     
     Works whether installed via install.sh or direct hermes plugins install.
     """
-    # This file is at: ~/.hermes/plugins/claw-aegis/paths.py (installed)
-    # or ClawAegis/adapters/hermes/paths.py (source)
+    # This file is at: ~/.hermes/plugins/agent-aegis/paths.py (installed)
+    # or AgentAegis/adapters/hermes/paths.py (source)
     this_file = Path(__file__).resolve()
     
     # 1. Check for the marker file in the directory of this file
@@ -46,7 +46,7 @@ def get_plugin_root() -> Path:
 
 def _read_plugin_root_marker(plugin_dir: Path) -> Optional[Path]:
     """Read the source root path from the marker file in plugin directory."""
-    marker_file = plugin_dir / CLAWAEGIS_ROOT_MARKER
+    marker_file = plugin_dir / AGENTAEGIS_ROOT_MARKER
     if marker_file.exists():
         try:
             root_path = Path(marker_file.read_text().strip()).resolve()
@@ -70,7 +70,7 @@ def get_plugin_directory() -> Path:
 
 
 def get_source_root() -> Path:
-    """Get the ClawAegis source repository root."""
+    """Get the AgentAegis source repository root."""
     return get_plugin_root()
 
 
@@ -90,7 +90,7 @@ def find_rpc_server() -> str:
 
     raise FileNotFoundError(
         f"Cannot find rpc-server.js. "
-        f"Please run 'npm run build' in the ClawAegis directory."
+        f"Please run 'npm run build' in the AgentAegis directory."
     )
 
 
@@ -139,8 +139,8 @@ def find_config_template() -> Optional[str]:
 
 
 def get_state_directory() -> str:
-    """Get the state directory for ClawAegis in Hermes."""
-    return os.path.expanduser("~/.hermes/claw-aegis-state")
+    """Get the state directory for AgentAegis in Hermes."""
+    return os.path.expanduser("~/.hermes/agent-aegis-state")
 
 
 def get_config_directory() -> str:
@@ -149,12 +149,12 @@ def get_config_directory() -> str:
 
 
 def resolve_hermes_paths() -> dict:
-    """Resolve all Hermes-specific paths for ClawAegis runtime."""
+    """Resolve all Hermes-specific paths for AgentAegis runtime."""
     hermes_home = Path(os.path.expanduser("~/.hermes"))
     plugin_dir = get_plugin_directory()
     plugin_root = get_plugin_root()
 
-    state_dir = str(hermes_home / "claw-aegis-state")
+    state_dir = str(hermes_home / "agent-aegis-state")
     config_dir = str(plugin_dir)
 
     skill_roots = []

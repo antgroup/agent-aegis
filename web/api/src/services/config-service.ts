@@ -2,8 +2,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import yaml from "js-yaml";
-import type { AegisConfig, ConfigUpdateRequest } from "@claw-aegis-web/shared";
-import { CONFIG_DEFAULTS, aegisConfigSchema } from "@claw-aegis-web/shared";
+import type { AegisConfig, ConfigUpdateRequest } from "@agent-aegis-web/shared";
+import { CONFIG_DEFAULTS, aegisConfigSchema } from "@agent-aegis-web/shared";
 
 type PluginJson = {
   id: string;

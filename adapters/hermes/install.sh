@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# ClawAegis Hermes adapter installer.
+# AgentAegis Hermes adapter installer.
 #
 # Usage:
-#   cd /path/to/ClawAegis && bash adapters/hermes/install.sh
+#   cd /path/to/AgentAegis && bash adapters/hermes/install.sh
 #
 # What it does:
 #   1. Compiles TypeScript (npm run build)
-#   2. Copies necessary files to ~/.hermes/plugins/claw-aegis/
+#   2. Copies necessary files to ~/.hermes/plugins/agent-aegis/
 #   3. Creates default config.yaml if missing
-#   4. Creates .clawaegis-root marker pointing to source
+#   4. Creates .agentaegis-root marker pointing to source
 #   5. Checks Hermes configuration for potential conflicts
 #
 # Note: Hermes has no built-in plugin install command.
@@ -18,11 +18,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-HERMES_PLUGIN_DIR="${HOME}/.hermes/plugins/claw-aegis"
+HERMES_PLUGIN_DIR="${HOME}/.hermes/plugins/agent-aegis"
 HERMES_CONFIG="${HOME}/.hermes/config.yaml"
-HERMES_STATE_DIR="${HOME}/.hermes/claw-aegis-state"
+HERMES_STATE_DIR="${HOME}/.hermes/agent-aegis-state"
 
-echo "==> ClawAegis Hermes Adapter Installer"
+echo "==> AgentAegis Hermes Adapter Installer"
 echo "    Repo root:   $REPO_ROOT"
 echo "    Plugin dir:  $HERMES_PLUGIN_DIR"
 echo ""
@@ -37,7 +37,7 @@ fi
 
 NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
 if [ "$NODE_VERSION" -lt 20 ]; then
-    echo "    WARNING: Node.js version is < 20. ClawAegis may not work correctly."
+    echo "    WARNING: Node.js version is < 20. AgentAegis may not work correctly."
 fi
 
 echo "    Node.js: $(node --version)"
@@ -143,7 +143,7 @@ else
 fi
 
 # Create source root marker
-echo "$REPO_ROOT" > "$HERMES_PLUGIN_DIR/.clawaegis-root"
+echo "$REPO_ROOT" > "$HERMES_PLUGIN_DIR/.agentaegis-root"
 
 echo "    Installed to: $HERMES_PLUGIN_DIR"
 echo ""
@@ -153,7 +153,7 @@ CONFIG_FILE="$HERMES_PLUGIN_DIR/config.yaml"
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "==> Creating default config.yaml..."
     cat > "$CONFIG_FILE" << 'YAML'
-# ClawAegis configuration for Hermes Agent.
+# AgentAegis configuration for Hermes Agent.
 # All defenses are enabled by default in enforce mode.
 # Set a defense to false or its mode to "observe"/"off" to adjust.
 
@@ -216,10 +216,10 @@ if [ -f "$HERMES_CONFIG" ]; then
             echo "    WARNING: Hermes approvals.mode is 'manual'"
             echo "    You may see double prompts for dangerous commands."
             echo "    Consider setting 'approvals.mode: off' in $HERMES_CONFIG"
-            echo "    to let ClawAegis handle all blocking."
+            echo "    to let AgentAegis handle all blocking."
         elif [ "$APPROVAL_MODE" = "smart" ]; then
             echo "    INFO: Hermes approvals.mode is 'smart'"
-            echo "    Consider 'approvals.mode: off' for full ClawAegis control."
+            echo "    Consider 'approvals.mode: off' for full AgentAegis control."
         else
             echo "    OK: Hermes approvals.mode is '$APPROVAL_MODE'"
         fi
@@ -236,12 +236,12 @@ echo ""
 echo "==> Installation complete!"
 echo ""
 echo "    Next steps:"
-echo "    1. Restart Hermes to activate ClawAegis"
+echo "    1. Restart Hermes to activate AgentAegis"
 echo "    2. Review config at: $CONFIG_FILE"
 echo "    3. Set webPort in config to enable Web UI (e.g., webPort: 3800)"
 echo ""
 echo "    Important notes:"
-echo "    - ClawAegis uses tool wrapping for blocking (Hermes pre_tool_call cannot block)"
+echo "    - AgentAegis uses tool wrapping for blocking (Hermes pre_tool_call cannot block)"
 echo "    - Consider 'approvals.mode: off' in Hermes config to avoid double prompts"
 echo "    - Logs are stored in: $HERMES_STATE_DIR"
 echo "    - To uninstall, remove $HERMES_PLUGIN_DIR"

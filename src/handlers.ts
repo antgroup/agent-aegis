@@ -20,7 +20,7 @@ function warnIfPromptHooksDisabled(api: OpenClawPluginApi): void {
         entries?: Record<string, { hooks?: { allowPromptInjection?: boolean } }>;
       };
     }
-  ).plugins?.entries ?? {})["claw-aegis"];
+  ).plugins?.entries ?? {})["agent-aegis"];
   if (pluginEntry?.hooks?.allowPromptInjection === false) {
     api.logger.warn(
       '安全插件配置中已关闭提示词注入 hook，提示防护将不会运行',
@@ -28,7 +28,7 @@ function warnIfPromptHooksDisabled(api: OpenClawPluginApi): void {
   }
 }
 
-export function createClawAegisRuntime(
+export function createAgentAegisRuntime(
   api: OpenClawPluginApi,
   options?: AegisEngineOptions,
 ) {
@@ -113,7 +113,7 @@ export function createClawAegisRuntime(
         if (ctx.sessionKey) {
           engine.state.clearSessionRuntimeState(ctx.sessionKey);
         }
-        engine.logger.info("claw-aegis: 已清理本轮临时安全状态", {
+        engine.logger.info("agent-aegis: 已清理本轮临时安全状态", {
           event: "agent_runtime_state_cleared",
           hook: "agent_end",
           sessionKey: ctx.sessionKey,
@@ -127,7 +127,7 @@ export function createClawAegisRuntime(
       ) => {
         if (ctx.sessionKey) {
           engine.state.clearSessionRuntimeState(ctx.sessionKey);
-          engine.logger.info("claw-aegis: 已清理 session 级临时安全状态", {
+          engine.logger.info("agent-aegis: 已清理 session 级临时安全状态", {
             event: "session_runtime_state_cleared",
             hook: "session_end",
             sessionKey: ctx.sessionKey,

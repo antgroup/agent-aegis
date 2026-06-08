@@ -1,7 +1,7 @@
 """
-ClawAegis JSON-RPC subprocess bridge.
+AgentAegis JSON-RPC subprocess bridge.
 
-Manages a Node.js child process running the ClawAegis RPC server and
+Manages a Node.js child process running the AgentAegis RPC server and
 provides a synchronous ``call(method, params)`` interface for the Hermes
 plugin hooks and tool wrappers.
 """
@@ -19,7 +19,7 @@ from typing import Any, Dict, Optional
 
 from .paths import find_rpc_server
 
-logger = logging.getLogger("claw-aegis.bridge")
+logger = logging.getLogger("agent-aegis.bridge")
 
 # Maximum restarts after unexpected process death
 _MAX_RESTARTS = 3
@@ -48,7 +48,7 @@ def _find_node() -> str:
 
 
 class AegisEngine:
-    """Manages a long-lived Node.js subprocess for ClawAegis RPC."""
+    """Manages a long-lived Node.js subprocess for AgentAegis RPC."""
 
     def __init__(self) -> None:
         self._proc: Optional[subprocess.Popen] = None
@@ -71,7 +71,7 @@ class AegisEngine:
             self._rpc_server = find_rpc_server()
 
         logger.info(
-            "Starting ClawAegis RPC: %s %s", self._node_bin, self._rpc_server,
+            "Starting AgentAegis RPC: %s %s", self._node_bin, self._rpc_server,
         )
         self._proc = subprocess.Popen(
             [self._node_bin, self._rpc_server],
@@ -108,11 +108,11 @@ class AegisEngine:
         if self._proc is not None and self._proc.poll() is None:
             return True  # still alive
         if self._restarts >= _MAX_RESTARTS:
-            logger.error("ClawAegis RPC process died; max restarts reached")
+            logger.error("AgentAegis RPC process died; max restarts reached")
             return False
         self._restarts += 1
         logger.warning(
-            "ClawAegis RPC process died; restarting (%d/%d)",
+            "AgentAegis RPC process died; restarting (%d/%d)",
             self._restarts, _MAX_RESTARTS,
         )
         self.start()
@@ -142,7 +142,7 @@ class AegisEngine:
         """
         with self._lock:
             if not self._restart_if_needed():
-                raise RuntimeError("ClawAegis RPC process is not running")
+                raise RuntimeError("AgentAegis RPC process is not running")
 
             self._id_counter += 1
             request = {
@@ -164,16 +164,16 @@ class AegisEngine:
                 # Read one response line
                 response_line = proc.stdout.readline()
                 if not response_line:
-                    raise RuntimeError("ClawAegis RPC: empty response (process may have died)")
+                    raise RuntimeError("AgentAegis RPC: empty response (process may have died)")
 
                 response = json.loads(response_line)
             except (BrokenPipeError, OSError, json.JSONDecodeError) as exc:
-                raise RuntimeError(f"ClawAegis RPC communication error: {exc}") from exc
+                raise RuntimeError(f"AgentAegis RPC communication error: {exc}") from exc
 
             if "error" in response and response["error"]:
                 err = response["error"]
                 raise RuntimeError(
-                    f"ClawAegis RPC error ({err.get('code', '?')}): {err.get('message', '?')}"
+                    f"AgentAegis RPC error ({err.get('code', '?')}): {err.get('message', '?')}"
                 )
 
             return response.get("result", {})
@@ -183,7 +183,7 @@ class AegisEngine:
         try:
             return self.call(method, params)
         except Exception as exc:
-            logger.warning("ClawAegis RPC call %s failed: %s", method, exc)
+            logger.warning("AgentAegis RPC call %s failed: %s", method, exc)
             return {}
 
     @property

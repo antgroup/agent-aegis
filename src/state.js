@@ -87,7 +87,7 @@ function normalizeSelfIntegrityRecord(raw) {
         updatedAt: record.updatedAt,
     };
 }
-export class ClawAegisState {
+export class AgentAegisState {
     params;
     turnStates = new Map();
     loopCounters = new Map();

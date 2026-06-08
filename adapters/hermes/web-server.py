@@ -1,5 +1,5 @@
 """
-ClawAegis Web Server manager for Hermes.
+AgentAegis Web Server manager for Hermes.
 
 This module provides an optional Web UI server that can be started alongside
 the RPC engine. It manages the Node.js web API process and ensures proper
@@ -19,7 +19,7 @@ from typing import Any, Dict, Optional
 
 from .paths import find_web_api, get_state_directory, get_config_directory, get_plugin_directory
 
-logger = logging.getLogger("claw-aegis.web")
+logger = logging.getLogger("agent-aegis.web")
 
 # Default web server port
 _DEFAULT_PORT = 3800
@@ -91,7 +91,7 @@ class AegisWebServer:
         env["AEGIS_STATIC_DIR"] = ""
 
         logger.info(
-            "Starting ClawAegis Web API: %s %s (port %d)",
+            "Starting AgentAegis Web API: %s %s (port %d)",
             self._node_bin, self._web_api, self._port,
         )
 
@@ -122,7 +122,7 @@ class AegisWebServer:
                 raise RuntimeError("Web server process exited immediately")
 
             logger.info(
-                "ClawAegis Web API started at http://localhost:%d",
+                "AgentAegis Web API started at http://localhost:%d",
                 self._port,
             )
 
@@ -142,7 +142,7 @@ class AegisWebServer:
             except Exception:
                 proc.kill()
         self._proc = None
-        logger.info("ClawAegis Web API stopped")
+        logger.info("AgentAegis Web API stopped")
 
     def _drain_stderr(self) -> None:
         """Read stderr from the subprocess and forward to Python logging."""

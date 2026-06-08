@@ -1,5 +1,5 @@
 {
-  "name": "@openclaw/claw-aegis",
+  "name": "@openclaw/agent-aegis",
   "version": "2026.3.14",
   "private": true,
   "description": "OpenClaw safety guard plugin for prompt, tool, and tool-result hardening.",

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { CONFIG_DEFAULTS } from "@claw-aegis-web/shared";
+import { CONFIG_DEFAULTS } from "@agent-aegis-web/shared";
 import type { ConfigService } from "../services/config-service.js";
 
 export function createConfigRouter(configService: ConfigService): Router {

@@ -1,14 +1,14 @@
 """
-ClawAegis plugin for Hermes Agent.
+AgentAegis plugin for Hermes Agent.
 
-This plugin bridges the ClawAegis TypeScript security engine into Hermes
+This plugin bridges the AgentAegis TypeScript security engine into Hermes
 via a Node.js subprocess running a JSON-RPC server.  It registers lifecycle
 hooks and wraps high-risk tool handlers to enforce the same defense-in-depth
 protections available in the OpenClaw version.
 
 Installation:
-    cp -r /path/to/ClawAegis/adapters/hermes ~/.hermes/plugins/claw-aegis
-    cd /path/to/ClawAegis && npm run build
+    cp -r /path/to/AgentAegis/adapters/hermes ~/.hermes/plugins/agent-aegis
+    cd /path/to/AgentAegis && npm run build
 
 Or use the install script:
     bash adapters/hermes/install.sh
@@ -17,7 +17,7 @@ Note on Hermes Integration:
     - Hermes has no built-in plugin install command; plugins are auto-loaded
       from ~/.hermes/plugins/ directory
     - Hermes' pre_tool_call hook cannot block tool execution (observer only)
-    - ClawAegis uses tool wrapper replacement for actual blocking
+    - AgentAegis uses tool wrapper replacement for actual blocking
     - Consider setting 'approvals.mode: off' in Hermes config to avoid double prompts
 """
 
@@ -35,7 +35,7 @@ from .paths import (
     find_config_template,
 )
 
-logger = logging.getLogger("claw-aegis")
+logger = logging.getLogger("agent-aegis")
 
 # ---------------------------------------------------------------------------
 # Session state tracking (module-level so hooks and wrappers share it)
@@ -58,7 +58,7 @@ def _get_run_id() -> str:
 # ---------------------------------------------------------------------------
 
 def _load_config() -> dict:
-    """Load ClawAegis config from plugin config directory
+    """Load AgentAegis config from plugin config directory
     or fall back to defaults (all defenses enabled, enforce mode).
     """
     try:
@@ -101,7 +101,7 @@ def _check_hermes_config() -> dict:
                 issues.append("Hermes approvals.mode is 'manual' - you may see double prompts")
                 suggestions.append("Set 'approvals.mode: off' in ~/.hermes/config.yaml")
             elif approval_mode == "smart":
-                suggestions.append("Consider 'approvals.mode: off' to let ClawAegis handle all blocking")
+                suggestions.append("Consider 'approvals.mode: off' to let AgentAegis handle all blocking")
 
         except Exception as exc:
             logger.debug("Could not check Hermes config: %s", exc)
@@ -110,7 +110,7 @@ def _check_hermes_config() -> dict:
 
 
 def _resolve_paths() -> dict:
-    """Resolve Hermes-specific paths for the ClawAegis runtime."""
+    """Resolve Hermes-specific paths for the AgentAegis runtime."""
     return resolve_hermes_paths()
 
 
@@ -226,7 +226,7 @@ def register(ctx):
     from .tool_wrappers import wrap_dangerous_tools
     from .paths import find_rpc_server
 
-    logger.info("ClawAegis: Initializing security plugin...")
+    logger.info("AgentAegis: Initializing security plugin...")
 
     # 0. Pre-initialization check (especially for GitHub installs)
     try:
@@ -234,7 +234,7 @@ def register(ctx):
     except FileNotFoundError:
         root = Path(__file__).resolve().parent.parent.parent
         logger.error("=" * 60)
-        logger.error("ClawAegis is not built! Defense will not be active.")
+        logger.error("AgentAegis is not built! Defense will not be active.")
         logger.error(f"Please run the following commands in: {root}")
         logger.error("    npm install && npm run build")
         logger.error("=" * 60)
@@ -244,21 +244,21 @@ def register(ctx):
     hermes_check = _check_hermes_config()
     if hermes_check["issues"]:
         for issue in hermes_check["issues"]:
-            logger.warning(f"ClawAegis: {issue}")
+            logger.warning(f"AgentAegis: {issue}")
     if hermes_check["suggestions"]:
         for suggestion in hermes_check["suggestions"]:
-            logger.info(f"ClawAegis: Suggestion: {suggestion}")
+            logger.info(f"AgentAegis: Suggestion: {suggestion}")
 
     engine = AegisEngine()
 
     try:
         engine.start()
     except FileNotFoundError as exc:
-        logger.error("ClawAegis startup failed: %s", exc)
-        logger.error("Ensure Node.js is installed and run 'npm run build' in the ClawAegis directory.")
+        logger.error("AgentAegis startup failed: %s", exc)
+        logger.error("Ensure Node.js is installed and run 'npm run build' in the AgentAegis directory.")
         return
     except Exception as exc:
-        logger.error("ClawAegis startup failed with unexpected error: %s", exc)
+        logger.error("AgentAegis startup failed with unexpected error: %s", exc)
         return
 
     # Initialize the RPC runtime
@@ -277,7 +277,7 @@ def register(ctx):
             "protectedRoots": paths["protected_roots"],
         })
     except Exception as exc:
-        logger.error("ClawAegis init failed: %s", exc)
+        logger.error("AgentAegis init failed: %s", exc)
         engine.stop()
         return
 
@@ -303,8 +303,8 @@ def register(ctx):
             from .web_server import start_web_server, stop_web_server
             web = start_web_server(port=web_port)
             atexit.register(stop_web_server)
-            logger.info(f"ClawAegis: Web UI available at {web.url}")
+            logger.info(f"AgentAegis: Web UI available at {web.url}")
         except Exception as exc:
-            logger.warning(f"ClawAegis: Failed to start Web UI: {exc}")
+            logger.warning(f"AgentAegis: Failed to start Web UI: {exc}")
 
-    logger.info(f"ClawAegis: Security plugin active ({wrapped_count} tools wrapped)")
+    logger.info(f"AgentAegis: Security plugin active ({wrapped_count} tools wrapped)")

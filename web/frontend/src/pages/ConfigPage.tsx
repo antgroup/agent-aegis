@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { DEFENSE_GROUPS } from "@claw-aegis-web/shared";
-import type { AegisConfig } from "@claw-aegis-web/shared";
+import { DEFENSE_GROUPS } from "@agent-aegis-web/shared";
+import type { AegisConfig } from "@agent-aegis-web/shared";
 import { useConfig, useUpdateConfig, useResetConfig } from "../api/hooks";
 import { MasterControls } from "../components/config/MasterControls";
 import { DefenseGroup } from "../components/config/DefenseGroup";

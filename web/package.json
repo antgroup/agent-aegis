@@ -1,5 +1,5 @@
 {
-  "name": "claw-aegis-web",
+  "name": "agent-aegis-web",
   "private": true,
   "type": "module",
   "workspaces": [

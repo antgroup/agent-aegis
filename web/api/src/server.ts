@@ -3,7 +3,7 @@ import cors from "cors";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { API_PREFIX } from "@claw-aegis-web/shared";
+import { API_PREFIX } from "@agent-aegis-web/shared";
 import { createConfigRouter } from "./routes/config.js";
 import { createStatusRouter } from "./routes/status.js";
 import { createEventsRouter } from "./routes/events.js";
@@ -34,7 +34,7 @@ export function createServer(options: ServerOptions) {
   const fileWatcher = new FileWatcher(configService, stateService, eventService, skillScanEventService);
 
   fileWatcher.start().catch((err) =>
-    console.error("[claw-aegis-web] FileWatcher start error:", err),
+    console.error("[agent-aegis-web] FileWatcher start error:", err),
   );
 
   app.use(`${API_PREFIX}/config`, createConfigRouter(configService));
@@ -68,7 +68,7 @@ export function createServer(options: ServerOptions) {
       });
     });
   } else {
-    console.warn(`[claw-aegis-web] Static directory not found: ${frontendDist}. Web UI may not be available.`);
+    console.warn(`[agent-aegis-web] Static directory not found: ${frontendDist}. Web UI may not be available.`);
   }
 
   // Error handler
@@ -79,7 +79,7 @@ export function createServer(options: ServerOptions) {
       res: express.Response,
       _next: express.NextFunction,
     ) => {
-      console.error("[claw-aegis-web] Error:", err.message);
+      console.error("[agent-aegis-web] Error:", err.message);
       res.status(500).json({ ok: false, error: err.message });
     },
   );

@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import type { DefenseMode } from "@claw-aegis-web/shared";
+import type { DefenseMode } from "@agent-aegis-web/shared";
 import { useTranslation } from "react-i18next";
 
 const modeDefs: { value: DefenseMode; labelKey: string; color: string }[] = [

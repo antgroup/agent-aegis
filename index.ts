@@ -1,6 +1,6 @@
 import { definePluginEntry, type OpenClawPluginApi } from "./runtime-api.js";
 import { clawAegisPluginConfigDefinition } from "./src/config.js";
-import { createClawAegisRuntime } from "./src/handlers.js";
+import { createAgentAegisRuntime } from "./src/handlers.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- handlers have heterogeneous signatures; `any` is needed for contravariance
 type GenericHookHandler = (event: any, ctx: any) => any;
@@ -15,7 +15,7 @@ export function wrapHookFailOpen(
       return await handler(event, ctx);
     } catch (error) {
       api.logger.error(
-        `[claw-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${
+        `[agent-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -34,7 +34,7 @@ export function wrapSyncHookFailOpen(
       return handler(event, ctx);
     } catch (error) {
       api.logger.error(
-        `[claw-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${
+        `[agent-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -43,9 +43,9 @@ export function wrapSyncHookFailOpen(
   };
 }
 
-export function registerClawAegisPlugin(
+export function registerAgentAegisPlugin(
   api: OpenClawPluginApi,
-  createRuntime: typeof createClawAegisRuntime = createClawAegisRuntime,
+  createRuntime: typeof createAgentAegisRuntime = createAgentAegisRuntime,
 ): void {
   try {
     const runtime = createRuntime(api);
@@ -87,7 +87,7 @@ export function registerClawAegisPlugin(
     api.on("session_end", wrapSyncHookFailOpen(api, "session_end", runtime.hooks.session_end));
   } catch (error) {
     api.logger.error(
-      `[claw-aegis] register failed; fail-open keeps OpenClaw running: ${
+      `[agent-aegis] register failed; fail-open keeps OpenClaw running: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
@@ -95,11 +95,11 @@ export function registerClawAegisPlugin(
 }
 
 export default definePluginEntry({
-  id: "claw-aegis",
-  name: "Claw Aegis",
+  id: "agent-aegis",
+  name: "Agent Aegis",
   description: "Minimal safety guard plugin for prompt, tool, and tool-result hardening.",
   configSchema: clawAegisPluginConfigDefinition,
   register(api: OpenClawPluginApi) {
-    registerClawAegisPlugin(api);
+    registerAgentAegisPlugin(api);
   },
 });
