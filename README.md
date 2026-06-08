@@ -195,6 +195,77 @@ AgentAegis/
 
 ---
 
+## 🛡️ Kernel-Level Defense — eBPF / Sentinel (experimental, Linux)
+
+The defenses above run at **L1** — the agent's tool-call layer (prompt / tool /
+tool-result hooks). The framework-agnostic `sentinel/` subsystem adds deeper
+layers that watch raw **syscalls**, so it catches threats that never pass
+through the agent's tool registry: obfuscated `execve` payloads, sub-process
+file access, and direct kernel-level exfiltration.
+
+| Layer | Probe | What it sees |
+|---|---|---|
+| **L1** | tool-call hooks | agent-level tool intent (always on) |
+| **L2** | `uprobe` | user-space libc / OpenSSL symbols (`execve`, `openat`, `connect`, `SSL_read/write`) |
+| **L3** | `ebpf` tracepoints | system-wide syscalls (observe) |
+| **L3** | `lsm` (LSM-BPF) | in-kernel **enforce** — denies high-severity verdicts before the syscall completes |
+
+Captured syscalls are scored by the **native judge** (`sentinel/judges/native.ts`):
+sensitive-path access (e.g. any read of `/etc/shadow`), `execve` from scratch
+dirs (`/tmp`, `/dev/shm`, `/var/tmp`), and process-tree anomalies. Every event +
+verdict is persisted as JSONL and forwarded to the **WebUI Events page**.
+
+### Modes
+
+- **observe** (default) — detect, log, and surface to the WebUI, but never
+  intercept (the operation runs). Safe for rollout / data collection.
+- **enforce** — the `lsm` probe denies high-severity syscalls in-kernel.
+
+### Enable
+
+Kernel probes are **opt-in** (Linux only; require root + BCC). Add to
+`openclaw.plugin.json` `userConfig` (or toggle on the WebUI Config page):
+
+```json
+{
+  "userConfig": {
+    "nativeJudge": { "mode": "observe" },
+    "probes": {
+      "ebpf": { "enabled": true },
+      "lsm":  { "enabled": false, "minSeverity": "high" }
+    }
+  }
+}
+```
+
+For active in-kernel blocking set `nativeJudge.mode: "enforce"` and
+`probes.lsm.enabled: true`. Extend coverage without code via
+`nativeJudge.sensitivePaths` / `nativeJudge.scratchDirs`.
+
+**Requirements:** a Linux kernel with eBPF, root, BCC (`bpfcc-tools`,
+`python3-bpfcc`), and `/sys/kernel/debug` mounted. On macOS/Windows use the
+Docker harnesses below (they run a privileged Linux container via
+OrbStack / Docker Desktop).
+
+### Verify (one command, any OS with Docker)
+
+```bash
+npm run e2e:ebpf    # eBPF tracepoints catch `cat /etc/shadow`; native judge → block (enforce)
+npm run e2e:lsm     # LSM-BPF denies the syscall in-kernel (enforce)
+npm run e2e:uprobe  # user-space libc / OpenSSL symbol probe
+
+# Observe mode + WebUI: detect-but-don't-block, forward detections to the
+# WebUI on http://localhost:3800, and open the browser:
+npm run observe:live
+```
+
+Each harness builds a privileged Linux container, triggers `cat /etc/shadow`,
+and asserts the native judge produced the expected verdict (block in enforce,
+observed in observe mode). See `sentinel/README.md` for the subsystem's
+directory layout, dependency rules, and how to add new probes / judges.
+
+---
+
 ## 🖥️ WebUI
 
 AgentAegis includes a standalone Web management panel for visually configuring defense policies, viewing security status, browsing event logs, and managing Skill scans.

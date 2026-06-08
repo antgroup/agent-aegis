@@ -59,11 +59,20 @@ export interface NativeJudgeOptions {
    * caller cannot pre-compute the list.
    */
   getAgentPids?: () => readonly number[];
+  /**
+   * Defense posture. `"enforce"` (default) keeps the hard-block verdicts so the
+   * tool-call hook / LSM probe can stop the operation. `"observe"` downgrades
+   * every `block` verdict to `observe` — the threat is still detected, recorded,
+   * and surfaced to the WebUI, but nothing is intercepted. Use this for safe
+   * rollout / data-collection runs where the hook must not block.
+   */
+  mode?: "enforce" | "observe";
 }
 
 export function createNativeJudge(opts: NativeJudgeOptions = {}): Judge {
   const patterns = opts.sensitivePathPatterns ?? DEFAULT_SENSITIVE_PATTERNS;
   const scratchPatterns = opts.scratchDirPatterns ?? DEFAULT_SCRATCH_DIR_PATTERNS;
+  const mode = opts.mode ?? "enforce";
   const resolveAgentPids = (): readonly number[] =>
     opts.getAgentPids?.() ?? opts.agentPids ?? [];
   return {
@@ -79,16 +88,18 @@ export function createNativeJudge(opts: NativeJudgeOptions = {}): Judge {
         return null;
       }
 
-      const sensitive = judgeSensitivePath(event, patterns);
-      if (sensitive) return sensitive;
+      const verdict =
+        judgeSensitivePath(event, patterns) ??
+        judgeKernelEscape(event, scratchPatterns) ??
+        judgeProcessTreeAnomaly(event, resolveAgentPids());
+      if (!verdict) return null;
 
-      const escape = judgeKernelEscape(event, scratchPatterns);
-      if (escape) return escape;
-
-      const anomaly = judgeProcessTreeAnomaly(event, resolveAgentPids());
-      if (anomaly) return anomaly;
-
-      return null;
+      // Observe mode: detect-but-don't-block. Keep severity/reason/sideEffects
+      // intact so the audit trail and WebUI still show the full detection.
+      if (mode === "observe" && verdict.action === "block") {
+        return { ...verdict, action: "observe" };
+      }
+      return verdict;
     },
   };
 }

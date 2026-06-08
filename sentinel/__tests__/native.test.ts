@@ -57,6 +57,24 @@ describe("createNativeJudge", () => {
     expect(verdict?.severity).toBe("critical");
   });
 
+  it("observe mode downgrades the block verdict to observe (detect-but-don't-block)", async () => {
+    const judge = createNativeJudge({ mode: "observe" });
+    const ev = createProbeEvent({
+      source: "ebpf",
+      syscall: "openat",
+      pid: 4242,
+      args: { path: "/etc/shadow" },
+    });
+    const verdict = await judge.judge(ev);
+    expect(verdict).not.toBeNull();
+    // Still detected, with full severity/reason/judgeId for the audit + WebUI…
+    expect(verdict!.judgeId).toBe("native:sensitive-path");
+    expect(verdict!.severity).toBe("critical");
+    expect(verdict!.reason).toMatch(/sensitive path/);
+    // …but downgraded so the hook never intercepts.
+    expect(verdict!.action).toBe("observe");
+  });
+
   it("allows a normal execve", async () => {
     const judge = createNativeJudge();
     const ev = createProbeEvent({

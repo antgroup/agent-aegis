@@ -437,6 +437,10 @@
     }
   },
   "userConfig": {
+    "defaultBlockingMode": "observe",
+    "nativeJudge": {
+      "mode": "observe"
+    },
     "probes": {
       "ebpf": {
         "enabled": false

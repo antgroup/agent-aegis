@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { appendWebuiDefenseEvent } from "../../channel/webui-bridge.js";
 export function createOpenClawRuntime(api, opts = {}) {
     const logger = wrapLogger(api.logger);
     const pluginId = opts.pluginId ?? "agent-aegis";
@@ -73,6 +74,8 @@ export function createOpenClawRuntime(api, opts = {}) {
         platform: detectPlatform(),
     };
     const stateDir = path.join(api.runtime.state.resolveStateDir(), stateSubdir);
+    const webuiEventsFile = opts.webuiEventsFile ??
+        path.join(api.runtime.state.resolveStateDir(), "defense-events.jsonl");
     return {
         name: "openclaw",
         logger,
@@ -117,6 +120,16 @@ export function createOpenClawRuntime(api, opts = {}) {
             return merged;
         },
         getStateDir: () => stateDir,
+        onSentinelEvent: (event, verdict) => {
+            // Forward every detection into the WebUI's defense-events.jsonl so
+            // kernel-level (eBPF/uprobe/LSM) events show up on the Events page.
+            try {
+                appendWebuiDefenseEvent(webuiEventsFile, event, verdict);
+            }
+            catch (err) {
+                logger.warn(`sentinel webui forward failed: ${String(err)}`);
+            }
+        },
     };
 }
 function wrapLogger(raw) {

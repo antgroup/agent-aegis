@@ -194,6 +194,73 @@ AgentAegis/
 
 ---
 
+## 🛡️ 内核级防御 —— eBPF / Sentinel（实验性，Linux）
+
+上述防御工作在 **L1** —— 智能体的工具调用层（prompt / tool / tool-result 钩子）。
+框架无关的 `sentinel/` 子系统在其下增加了直接观测原始 **syscall** 的更深层防御，
+因此能捕获那些根本不经过智能体工具注册表的威胁：混淆的 `execve` 载荷、子进程文件
+访问、以及直接的内核级数据外泄。
+
+| 层 | 探针 | 观测内容 |
+|---|---|---|
+| **L1** | tool-call 钩子 | 智能体级工具意图（始终开启） |
+| **L2** | `uprobe` | 用户态 libc / OpenSSL 符号（`execve`、`openat`、`connect`、`SSL_read/write`） |
+| **L3** | `ebpf` tracepoint | 系统级 syscall（观测） |
+| **L3** | `lsm`（LSM-BPF） | 内核级 **enforce** —— 在 syscall 完成前拒绝高危判定 |
+
+捕获到的 syscall 由 **native judge**（`sentinel/judges/native.ts`）评分：敏感路径
+访问（如任何对 `/etc/shadow` 的读取）、从临时目录（`/tmp`、`/dev/shm`、`/var/tmp`）
+发起的 `execve`、以及进程树异常。每条事件 + 判定都以 JSONL 落盘，并转发到
+**WebUI 的 Events 页面**。
+
+### 模式
+
+- **observe（观测，默认）** —— 检测、记录并呈现到 WebUI，但**不拦截**（操作照常执行）。
+  适合灰度上线 / 数据采集。
+- **enforce（强制）** —— `lsm` 探针在内核内拒绝高危 syscall。
+
+### 启用
+
+内核探针是**按需开启**的（仅 Linux；需要 root + BCC）。在 `openclaw.plugin.json` 的
+`userConfig` 中添加（或在 WebUI Config 页面切换）：
+
+```json
+{
+  "userConfig": {
+    "nativeJudge": { "mode": "observe" },
+    "probes": {
+      "ebpf": { "enabled": true },
+      "lsm":  { "enabled": false, "minSeverity": "high" }
+    }
+  }
+}
+```
+
+要启用内核级实拦截，设 `nativeJudge.mode: "enforce"` 且 `probes.lsm.enabled: true`。
+通过 `nativeJudge.sensitivePaths` / `nativeJudge.scratchDirs` 可不改代码扩展覆盖范围。
+
+**前置要求：** 支持 eBPF 的 Linux 内核、root、BCC（`bpfcc-tools`、`python3-bpfcc`）、
+以及已挂载的 `/sys/kernel/debug`。macOS/Windows 上请用下面的 Docker 一键验证（它们通过
+OrbStack / Docker Desktop 跑特权 Linux 容器）。
+
+### 一键验证（任意 OS，需 Docker）
+
+```bash
+npm run e2e:ebpf    # eBPF tracepoint 捕获 `cat /etc/shadow`；native judge → block（enforce）
+npm run e2e:lsm     # LSM-BPF 在内核内拒绝该 syscall（enforce）
+npm run e2e:uprobe  # 用户态 libc / OpenSSL 符号探针
+
+# 观测模式 + WebUI：检测但不拦截，把检测结果转发到 http://localhost:3800 的
+# WebUI 并自动打开浏览器：
+npm run observe:live
+```
+
+每个 harness 都会构建特权 Linux 容器，触发 `cat /etc/shadow`，并断言 native judge
+产出预期判定（enforce 下为 block，observe 下为 observed）。子系统的目录约定、依赖方向
+规则、以及如何新增 probe / judge 详见 `sentinel/README.md`。
+
+---
+
 ## 🖥️ WebUI
 
 AgentAegis 附带独立的 Web 管理面板，用于可视化配置防御策略、查看安全状态、浏览事件日志和管理 Skill 扫描。

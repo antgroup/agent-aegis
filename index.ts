@@ -151,6 +151,7 @@ async function startSentinelForOpenClaw(
     createNativeJudge({
       sensitivePathPatterns: nativeCfg.sensitivePathPatterns,
       scratchDirPatterns: nativeCfg.scratchDirPatterns,
+      mode: nativeCfg.mode,
     }),
   );
 
@@ -294,6 +295,7 @@ function readLsmConfig(config: Record<string, unknown>): {
 export function _internalReadNativeJudgeConfig(config: Record<string, unknown>): {
   sensitivePathPatterns?: readonly RegExp[];
   scratchDirPatterns?: readonly RegExp[];
+  mode?: "enforce" | "observe";
 } {
   const nj = (config.nativeJudge ?? {}) as Record<string, unknown>;
   const sensitivePathPatterns = toRegexpList(nj.sensitivePaths, /* anchorStart */ false);
@@ -301,6 +303,7 @@ export function _internalReadNativeJudgeConfig(config: Record<string, unknown>):
   const out: ReturnType<typeof _internalReadNativeJudgeConfig> = {};
   if (sensitivePathPatterns.length > 0) out.sensitivePathPatterns = sensitivePathPatterns;
   if (scratchDirPatterns.length > 0) out.scratchDirPatterns = scratchDirPatterns;
+  if (nj.mode === "observe" || nj.mode === "enforce") out.mode = nj.mode;
   return out;
 }
 

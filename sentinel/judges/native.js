@@ -34,6 +34,7 @@ const DEFAULT_SCRATCH_DIR_PATTERNS = [
 export function createNativeJudge(opts = {}) {
     const patterns = opts.sensitivePathPatterns ?? DEFAULT_SENSITIVE_PATTERNS;
     const scratchPatterns = opts.scratchDirPatterns ?? DEFAULT_SCRATCH_DIR_PATTERNS;
+    const mode = opts.mode ?? "enforce";
     const resolveAgentPids = () => opts.getAgentPids?.() ?? opts.agentPids ?? [];
     return {
         id: JUDGE_ID,
@@ -45,16 +46,17 @@ export function createNativeJudge(opts = {}) {
                 event.source !== "test") {
                 return null;
             }
-            const sensitive = judgeSensitivePath(event, patterns);
-            if (sensitive)
-                return sensitive;
-            const escape = judgeKernelEscape(event, scratchPatterns);
-            if (escape)
-                return escape;
-            const anomaly = judgeProcessTreeAnomaly(event, resolveAgentPids());
-            if (anomaly)
-                return anomaly;
-            return null;
+            const verdict = judgeSensitivePath(event, patterns) ??
+                judgeKernelEscape(event, scratchPatterns) ??
+                judgeProcessTreeAnomaly(event, resolveAgentPids());
+            if (!verdict)
+                return null;
+            // Observe mode: detect-but-don't-block. Keep severity/reason/sideEffects
+            // intact so the audit trail and WebUI still show the full detection.
+            if (mode === "observe" && verdict.action === "block") {
+                return { ...verdict, action: "observe" };
+            }
+            return verdict;
         },
     };
 }

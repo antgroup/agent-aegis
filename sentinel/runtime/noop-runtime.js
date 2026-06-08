@@ -58,5 +58,6 @@ export function createNoopRuntime(opts = {}) {
         },
         readConfig: async () => opts.config ?? {},
         getStateDir: () => stateDir,
+        onSentinelEvent: opts.onSentinelEvent,
     };
 }

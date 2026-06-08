@@ -90,6 +90,7 @@ async function startSentinelForOpenClaw(api, engine) {
     sentinel.registerJudge(createNativeJudge({
         sensitivePathPatterns: nativeCfg.sensitivePathPatterns,
         scratchDirPatterns: nativeCfg.scratchDirPatterns,
+        mode: nativeCfg.mode,
     }));
     try {
         const config = await runtime.readConfig();
@@ -196,6 +197,8 @@ export function _internalReadNativeJudgeConfig(config) {
         out.sensitivePathPatterns = sensitivePathPatterns;
     if (scratchDirPatterns.length > 0)
         out.scratchDirPatterns = scratchDirPatterns;
+    if (nj.mode === "observe" || nj.mode === "enforce")
+        out.mode = nj.mode;
     return out;
 }
 function toRegexpList(raw, anchorStart) {

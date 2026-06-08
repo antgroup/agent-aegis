@@ -16,6 +16,8 @@ export interface NoopRuntimeOptions {
   capabilities?: Partial<AgentRuntimeCapabilities>;
   initialContext?: Partial<AgentContext>;
   config?: Record<string, unknown>;
+  /** Optional forward hook — lets callers surface sentinel events (e.g. to the WebUI). */
+  onSentinelEvent?: AgentRuntime["onSentinelEvent"];
 }
 
 const consoleLogger: AgentLogger = {
@@ -83,5 +85,6 @@ export function createNoopRuntime(opts: NoopRuntimeOptions = {}): AgentRuntime {
     },
     readConfig: async () => opts.config ?? {},
     getStateDir: () => stateDir,
+    onSentinelEvent: opts.onSentinelEvent,
   };
 }

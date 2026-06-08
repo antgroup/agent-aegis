@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { OpenClawPluginApi } from "../../../runtime-api.js";
+import { appendWebuiDefenseEvent } from "../../channel/webui-bridge.js";
 import type {
   AgentContext,
   AgentLogger,
@@ -27,6 +28,13 @@ export interface OpenClawRuntimeOptions {
   stateSubdir?: string;
   /** Plugin id used to look up config. Defaults to "agent-aegis". */
   pluginId?: string;
+  /**
+   * Where to forward sentinel detections so the WebUI sees them. Defaults to
+   * `<resolveStateDir()>/defense-events.jsonl` — the same file the L1 engine
+   * writes and the WebUI tails, so kernel-level detections land on the Events
+   * page next to L1 defenses.
+   */
+  webuiEventsFile?: string;
 }
 
 export function createOpenClawRuntime(
@@ -112,6 +120,9 @@ export function createOpenClawRuntime(
   };
 
   const stateDir = path.join(api.runtime.state.resolveStateDir(), stateSubdir);
+  const webuiEventsFile =
+    opts.webuiEventsFile ??
+    path.join(api.runtime.state.resolveStateDir(), "defense-events.jsonl");
 
   return {
     name: "openclaw",
@@ -158,6 +169,15 @@ export function createOpenClawRuntime(
       return merged;
     },
     getStateDir: () => stateDir,
+    onSentinelEvent: (event, verdict) => {
+      // Forward every detection into the WebUI's defense-events.jsonl so
+      // kernel-level (eBPF/uprobe/LSM) events show up on the Events page.
+      try {
+        appendWebuiDefenseEvent(webuiEventsFile, event, verdict);
+      } catch (err) {
+        logger.warn(`sentinel webui forward failed: ${String(err)}`);
+      }
+    },
   };
 }
 
