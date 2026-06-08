@@ -1,4 +1,4 @@
-# Dockerfile for ClawAegis eBPF probe end-to-end verification.
+# Dockerfile for AgentAegis eBPF probe end-to-end verification.
 #
 # Builds a privileged-ready Ubuntu image with everything the probe needs:
 #   - bpfcc-tools / python3-bpfcc: BCC runtime for the BPF programs
@@ -8,7 +8,7 @@
 #     doesn't include build artifacts
 #   - nodejs: drives sentinel + judge pipeline from verify-e2e.mjs
 #
-# Build:   docker build -t claw-aegis-ebpf-test .
+# Build:   docker build -t agent-aegis-ebpf-test .
 # Run via the sibling verify-e2e.sh wrapper (handles mounts + privileges).
 FROM ubuntu:24.04
 RUN apt-get update && \

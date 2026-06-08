@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { DEFENSE_GROUPS } from "@claw-aegis-web/shared";
-import type { DefenseStatusEntry, StatusResponse } from "@claw-aegis-web/shared";
+import { DEFENSE_GROUPS } from "@agent-aegis-web/shared";
+import type { DefenseStatusEntry, StatusResponse } from "@agent-aegis-web/shared";
 import type { ConfigService } from "../services/config-service.js";
 import type { StateService } from "../services/state-service.js";
 

@@ -10,7 +10,7 @@ set -e
 
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$HERE/../../.." && pwd )"
-IMG="${IMG:-claw-aegis-uprobe-test:latest}"
+IMG="${IMG:-agent-aegis-uprobe-test:latest}"
 
 echo "==> building image $IMG (cached after first run)"
 docker build --progress=plain -t "$IMG" "$HERE"

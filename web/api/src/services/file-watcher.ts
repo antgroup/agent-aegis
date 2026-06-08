@@ -4,8 +4,8 @@ import { promises as fs } from "node:fs";
 import {
   DEFENSE_EVENTS_FILENAME,
   SKILL_SCAN_EVENTS_FILENAME,
-} from "@claw-aegis-web/shared";
-import type { SecurityEvent, SkillScanEvent } from "@claw-aegis-web/shared";
+} from "@agent-aegis-web/shared";
+import type { SecurityEvent, SkillScanEvent } from "@agent-aegis-web/shared";
 import type { ConfigService } from "./config-service.js";
 import type { StateService } from "./state-service.js";
 import type { EventService } from "./event-service.js";

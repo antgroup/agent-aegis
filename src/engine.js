@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { BLOCK_REASON_DISPATCH_GUARD, CLAW_AEGIS_PLUGIN_ID, DEFENSE_EVENTS_FILENAME, SKILL_SCAN_EVENTS_FILENAME, STARTUP_SCAN_BUDGET_MS, } from "./config.js";
-import { resolveClawAegisPluginConfig, resolveClawAegisStateDir, resolveSkillScanRoots, } from "./config.js";
+import { BLOCK_REASON_DISPATCH_GUARD, AGENT_AEGIS_PLUGIN_ID, DEFENSE_EVENTS_FILENAME, SKILL_SCAN_EVENTS_FILENAME, STARTUP_SCAN_BUDGET_MS, } from "./config.js";
+import { resolveAgentAegisPluginConfig, resolveAgentAegisStateDir, resolveSkillScanRoots, } from "./config.js";
 import { buildDynamicPromptContext, buildLoopGuardStableArgsKey, buildStaticSystemContext, collectScriptArtifactRecords, collectSensitiveOutputValues, collectToolResultScanText, detectCommandObfuscationViolation, AEGIS_REFUSAL_PREFIX, detectDispatchGuardViolation, detectHighRiskCommand, detectUserRiskFlags, isOutboundToolCall, isThirdPartyWebToolResultMessage, normalizeToolName, normalizeToolParamsForGuard, reviewSuspiciousOutboundChain, resolveInlineExecutionViolation, resolveMemoryGuardViolation, resolveOutsideWorkspaceDeletionViolation, resolveProtectedPathCandidates, resolveProtectedPathViolation, resolveScriptProvenanceViolation, resolveSelfProtectionTextViolation, sanitizeAssistantMessage, sanitizeSensitiveOutputText, sanitizeToolResultMessage, scanToolResultText, } from "./rules.js";
 import { TOOL_CALL_DEFENSE_STRATEGIES, } from "./security-strategies.js";
 import { SkillScanService } from "./scan-service.js";
-import { ClawAegisState } from "./state.js";
+import { AgentAegisState } from "./state.js";
 // ---------------------------------------------------------------------------
 // Unified Defense Engine
 // ---------------------------------------------------------------------------
@@ -26,14 +26,14 @@ export class AegisDefenseEngine {
         this.api = api;
         this.logger = createAegisLogger(this.api);
         this.now = options?.now ?? Date.now;
-        this.stateDir = options?.stateDir ?? resolveClawAegisStateDir(this.api);
+        this.stateDir = options?.stateDir ?? resolveAgentAegisStateDir(this.api);
         this.emitDefenseEvent = createDefenseEventWriter(this.stateDir);
-        this.config = resolveClawAegisPluginConfig({
+        this.config = resolveAgentAegisPluginConfig({
             pluginConfig: this.api.pluginConfig,
             resolvePath: (p) => this.api.resolvePath(p),
         });
         this.skillScanRoots = options?.skillScanRoots ?? resolveSkillScanRoots(this.api);
-        this.state = new ClawAegisState({ stateDir: this.stateDir, logger: this.logger, now: this.now });
+        this.state = new AgentAegisState({ stateDir: this.stateDir, logger: this.logger, now: this.now });
         const emitSkillScanEvent = createSkillScanEventWriter(this.stateDir);
         this.scanService = new SkillScanService({
             state: this.state,
@@ -56,13 +56,13 @@ export class AegisDefenseEngine {
     // Lifecycle & State
     // -----------------------------------------------------------------------
     async start() {
-        this.logger.info("claw-aegis: 引擎启动", { event: "engine_start" });
+        this.logger.info("agent-aegis: 引擎启动", { event: "engine_start" });
         try {
             await this.state.loadPersistentState();
-            this.logger.info("claw-aegis: 已恢复持久化状态", { event: "state_restored" });
+            this.logger.info("agent-aegis: 已恢复持久化状态", { event: "state_restored" });
         }
         catch (error) {
-            this.logger.error("claw-aegis: 恢复持久化状态失败", {
+            this.logger.error("agent-aegis: 恢复持久化状态失败", {
                 event: "state_restore_failed",
                 reason: error instanceof Error ? error.message : String(error),
             });
@@ -72,14 +72,14 @@ export class AegisDefenseEngine {
                 ? await resolveProtectedRoots(this.api, this.stateDir, this.config)
                 : [];
             this.state.setProtectedRoots(protectedRoots);
-            this.logger.info("claw-aegis: 已解析受保护路径", {
+            this.logger.info("agent-aegis: 已解析受保护路径", {
                 event: "protected_roots_ready",
                 count: protectedRoots.length,
                 enabled: this.config.selfProtectionEnabled,
             });
         }
         catch (error) {
-            this.logger.error("claw-aegis: 解析受保护路径失败", {
+            this.logger.error("agent-aegis: 解析受保护路径失败", {
                 event: "protected_roots_failed",
                 reason: error instanceof Error ? error.message : String(error),
             });
@@ -93,10 +93,10 @@ export class AegisDefenseEngine {
                 });
                 this.state.setSelfIntegrityRecord(integrityRecord);
                 await this.state.persistSelfIntegrity();
-                this.logger.info("claw-aegis: 已刷新自完整性记录", { event: "self_integrity_refreshed" });
+                this.logger.info("agent-aegis: 已刷新自完整性记录", { event: "self_integrity_refreshed" });
             }
             catch (error) {
-                this.logger.error("claw-aegis: 刷新自完整性记录失败", {
+                this.logger.error("agent-aegis: 刷新自完整性记录失败", {
                     event: "self_integrity_failed",
                     reason: error instanceof Error ? error.message : String(error),
                 });
@@ -104,11 +104,11 @@ export class AegisDefenseEngine {
         }
         try {
             if (!this.config.skillScanEnabled) {
-                this.logger.info("claw-aegis: 配置已关闭 skill 扫描", { event: "skill_scan_disabled" });
+                this.logger.info("agent-aegis: 配置已关闭 skill 扫描", { event: "skill_scan_disabled" });
                 return;
             }
             if (this.config.skillRoots.length > 0) {
-                this.logger.warn("claw-aegis: 已忽略过时的 skillRoots 配置", {
+                this.logger.warn("agent-aegis: 已忽略过时的 skillRoots 配置", {
                     event: "skill_scan_legacy_roots_ignored",
                     ignoredCount: this.config.skillRoots.length,
                 });
@@ -118,7 +118,7 @@ export class AegisDefenseEngine {
                 void this.scanService
                     .scanRoots({ roots: this.skillScanRoots, budgetMs: STARTUP_SCAN_BUDGET_MS })
                     .catch((error) => {
-                    this.logger.warn("claw-aegis: 启动阶段的 skill 扫描已降级", {
+                    this.logger.warn("agent-aegis: 启动阶段的 skill 扫描已降级", {
                         event: "startup_skill_scan_failed",
                         reason: error instanceof Error ? error.message : String(error),
                     });
@@ -126,7 +126,7 @@ export class AegisDefenseEngine {
             }
         }
         catch (error) {
-            this.logger.error("claw-aegis: 启动 skill 扫描服务失败", {
+            this.logger.error("agent-aegis: 启动 skill 扫描服务失败", {
                 event: "skill_scan_start_failed",
                 reason: error instanceof Error ? error.message : String(error),
             });
@@ -168,7 +168,7 @@ export class AegisDefenseEngine {
             details: { flags: match.flags },
             userInput: (content ?? "").slice(0, 500),
         });
-        this.logger.warn("claw-aegis: 检测到用户风险请求", {
+        this.logger.warn("agent-aegis: 检测到用户风险请求", {
             event: "user_risk_detected",
             hook: "message_received",
             sessionKey,
@@ -206,7 +206,7 @@ export class AegisDefenseEngine {
                 reason: `脱敏 ${sanitized.redactionCount} 处敏感内容`,
                 details: { redactionCount: sanitized.redactionCount, matchedKeywords: sanitized.matchedKeywords },
             });
-            this.logger.warn("claw-aegis: 已脱敏对外发送消息中的敏感内容", {
+            this.logger.warn("agent-aegis: 已脱敏对外发送消息中的敏感内容", {
                 event: "outbound_message_redacted",
                 hook: "message_sending",
                 sessionKey,
@@ -252,7 +252,7 @@ export class AegisDefenseEngine {
                     const riskySkills = [
                         ...new Set(skillReview.riskyAssessments.map((a) => a.skillId)),
                     ];
-                    this.logger.warn("claw-aegis: 已将高风险 skill 提升为提示防护", {
+                    this.logger.warn("agent-aegis: 已将高风险 skill 提升为提示防护", {
                         event: "skill_prompt_guard_triggered",
                         hook: "before_prompt_build",
                         sessionKey,
@@ -273,7 +273,7 @@ export class AegisDefenseEngine {
                 }
             }
             catch (error) {
-                this.logger.error("claw-aegis: 本轮 skill 风险复核失败", {
+                this.logger.error("agent-aegis: 本轮 skill 风险复核失败", {
                     event: "skill_prompt_guard_failed",
                     hook: "before_prompt_build",
                     reason: error instanceof Error ? error.message : String(error),
@@ -288,7 +288,7 @@ export class AegisDefenseEngine {
         ]);
         const durationMs = this.now() - startedAt;
         if (currentState?.prependNeeded) {
-            this.logger.info("claw-aegis: 已注入提示防护", {
+            this.logger.info("agent-aegis: 已注入提示防护", {
                 event: "prompt_safeguards_injected",
                 hook: "before_prompt_build",
                 sessionKey,
@@ -357,7 +357,7 @@ export class AegisDefenseEngine {
             userInput: trimmedContent,
         });
         if (this.config.dispatchGuardMode === "enforce") {
-            this.logger.warn(`claw-aegis: ${hookName} 已拦截危险操作请求`, {
+            this.logger.warn(`agent-aegis: ${hookName} 已拦截危险操作请求`, {
                 event: "dispatch_guard_blocked",
                 hook: hookName,
                 sessionKey,
@@ -367,10 +367,10 @@ export class AegisDefenseEngine {
             return {
                 block: true,
                 reason,
-                text: `[ClawAegis] ${reason}\n\n所有破坏性操作必须通过标准 tool call 执行，不能绕过安全 hook。如确需执行，请联系管理员调整安全策略。`,
+                text: `[AgentAegis] ${reason}\n\n所有破坏性操作必须通过标准 tool call 执行，不能绕过安全 hook。如确需执行，请联系管理员调整安全策略。`,
             };
         }
-        this.logger.info(`claw-aegis: ${hookName} 已观测到危险操作请求（observe 模式）`, {
+        this.logger.info(`agent-aegis: ${hookName} 已观测到危险操作请求（observe 模式）`, {
             event: "dispatch_guard_observed",
             hook: hookName,
             sessionKey,
@@ -478,7 +478,7 @@ export class AegisDefenseEngine {
                     toolParams: normalizedParams,
                     userInput: sessionKey ? this.state.peekLastUserInput(sessionKey) : undefined,
                 });
-                this.logger.warn(strategy.blockedMessage ?? "claw-aegis: 已阻止风险工具调用", {
+                this.logger.warn(strategy.blockedMessage ?? "agent-aegis: 已阻止风险工具调用", {
                     event: "tool_call_blocked",
                     hook: "before_tool_call",
                     toolName: normalizedToolName,
@@ -506,7 +506,7 @@ export class AegisDefenseEngine {
                 logObservedToolCall({
                     logger: this.logger,
                     mechanism: strategy.id,
-                    message: strategy.observedMessage ?? "claw-aegis: 观察者模式命中风险工具调用，已放行",
+                    message: strategy.observedMessage ?? "agent-aegis: 观察者模式命中风险工具调用，已放行",
                     sessionKey,
                     runId,
                     toolName: normalizedToolName,
@@ -557,7 +557,7 @@ export class AegisDefenseEngine {
                 if (sessionKey && derivedSignals.runtimeRiskFlags.length > 0) {
                     this.state.noteRuntimeRisk(sessionKey, derivedSignals.runtimeRiskFlags);
                 }
-                this.logger.info("claw-aegis: 已记录本轮新产生的脚本产物", {
+                this.logger.info("agent-aegis: 已记录本轮新产生的脚本产物", {
                     event: "script_artifacts_recorded",
                     hook: "after_tool_call",
                     sessionKey,
@@ -570,7 +570,7 @@ export class AegisDefenseEngine {
         const calls = this.state.peekRunToolCalls(runId);
         if (calls.length > 0) {
             const blockedCount = calls.filter((call) => call.blocked).length;
-            this.logger.info("claw-aegis: 已更新同 run 工具调用链", {
+            this.logger.info("agent-aegis: 已更新同 run 工具调用链", {
                 event: "tool_call_chain_updated",
                 hook: "after_tool_call",
                 sessionKey,
@@ -596,7 +596,7 @@ export class AegisDefenseEngine {
                 reason,
                 details: { hook: "llm_output", model, provider },
             });
-            this.logger.info("claw-aegis: LLM 输出包含 Aegis 拒绝标记", {
+            this.logger.info("agent-aegis: LLM 输出包含 Aegis 拒绝标记", {
                 event: "prompt_self_block_detected",
                 hook: "llm_output",
                 model,
@@ -624,7 +624,7 @@ export class AegisDefenseEngine {
                 reason: `脱敏 assistant 输出 ${sanitized.redactionCount} 处`,
                 details: { redactionCount: sanitized.redactionCount, matchedKeywords: sanitized.matchedKeywords },
             });
-            this.logger.warn("claw-aegis: 已脱敏 assistant 输出中的敏感内容", {
+            this.logger.warn("agent-aegis: 已脱敏 assistant 输出中的敏感内容", {
                 event: "assistant_output_redacted",
                 hook: "before_message_write",
                 sessionKey,
@@ -680,14 +680,14 @@ export class AegisDefenseEngine {
                     reason: `风险标记: ${outcome.riskFlags.join(", ") || "suspicious/oversize"}`,
                     details: { flags: outcome.riskFlags, suspicious: outcome.suspicious, oversize: outcome.oversize },
                 });
-                this.logger.warn("claw-aegis: 已完成工具结果审查", { event: "tool_result_reviewed", suspicious: outcome.suspicious, flags: outcome.riskFlags, durationMs });
+                this.logger.warn("agent-aegis: 已完成工具结果审查", { event: "tool_result_reviewed", suspicious: outcome.suspicious, flags: outcome.riskFlags, durationMs });
             }
             this.finishCheck("before_message_write", "tool_result_scan", sessionKey, "risk_detected", startedAt);
             return sanitized.changed ? { message: sanitized.message, changed: true } : undefined;
         }
         catch (error) {
             this.state.markToolResultSeen(sessionKey);
-            this.logger.error("claw-aegis: 工具结果扫描已降级", {
+            this.logger.error("agent-aegis: 工具结果扫描已降级", {
                 event: "tool_result_scan_failed",
                 reason: error instanceof Error ? error.message : String(error),
             });
@@ -773,13 +773,13 @@ function createSkillScanEventWriter(stateDir) {
     };
 }
 function logDefenseStart(logger, meta) {
-    logger.info("claw-aegis: 开始执行防御检查", { event: "defense_check_started", ...meta });
+    logger.info("agent-aegis: 开始执行防御检查", { event: "defense_check_started", ...meta });
 }
 function logDefenseFinish(logger, meta) {
-    logger.info("claw-aegis: 防御检查结束", { event: "defense_check_finished", ...meta });
+    logger.info("agent-aegis: 防御检查结束", { event: "defense_check_finished", ...meta });
 }
 function logDefenseResult(logger, meta, level = "info") {
-    const message = "claw-aegis: 防御检查结果";
+    const message = "agent-aegis: 防御检查结果";
     const payload = { event: "defense_check_result", ...meta };
     if (level === "warn")
         logger.warn(message, payload);
@@ -858,7 +858,7 @@ async function buildSelfIntegrityRecord(params) {
             }
         }
     }
-    return { pluginId: CLAW_AEGIS_PLUGIN_ID, stateDir: params.stateDir, rootDir, rootRealPath, protectedRoots: params.protectedRoots, fingerprints, updatedAt: Date.now() };
+    return { pluginId: AGENT_AEGIS_PLUGIN_ID, stateDir: params.stateDir, rootDir, rootRealPath, protectedRoots: params.protectedRoots, fingerprints, updatedAt: Date.now() };
 }
 function createSyntheticSkillRiskState(params) {
     return { userRiskFlags: [], hasToolResult: false, toolResultRiskFlags: [], toolResultSuspicious: false, toolResultOversize: false, skillRiskFlags: [...params.skillRiskFlags], riskySkills: [...params.riskySkills], runtimeRiskFlags: [], prependNeeded: params.riskySkills.length > 0, updatedAt: params.now };

@@ -40,7 +40,7 @@ export function createNoopRuntime(opts = {}) {
         platform: detectPlatform(),
         ...opts.capabilities,
     };
-    const stateDir = opts.stateDir ?? path.join(os.tmpdir(), "claw-aegis-sentinel-noop");
+    const stateDir = opts.stateDir ?? path.join(os.tmpdir(), "agent-aegis-sentinel-noop");
     const shutdownCbs = [];
     return {
         name: opts.name ?? "noop",

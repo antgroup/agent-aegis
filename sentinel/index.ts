@@ -182,7 +182,7 @@ export function startSentinel(
   };
 
   logger.info(
-    `[claw-aegis] sentinel core constructed (strategy=${strategy}, runtime=${runtime.name}); judges/probes register next`,
+    `[agent-aegis] sentinel core constructed (strategy=${strategy}, runtime=${runtime.name}); judges/probes register next`,
   );
   return handle;
 }

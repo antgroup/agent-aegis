@@ -1,6 +1,6 @@
 import { definePluginEntry, type OpenClawPluginApi } from "./runtime-api.js";
-import { clawAegisPluginConfigDefinition } from "./src/config.js";
-import { createClawAegisRuntime } from "./src/handlers.js";
+import { agentAegisPluginConfigDefinition } from "./src/config.js";
+import { createAgentAegisRuntime } from "./src/handlers.js";
 import { startSentinel, type SentinelHandle } from "./sentinel/index.js";
 import { createL1BridgeJudge } from "./sentinel/judges/l1-bridge.js";
 import { createNativeJudge } from "./sentinel/judges/native.js";
@@ -22,7 +22,7 @@ export function wrapHookFailOpen(
       return await handler(event, ctx);
     } catch (error) {
       api.logger.error(
-        `[claw-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${
+        `[agent-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -41,7 +41,7 @@ export function wrapSyncHookFailOpen(
       return handler(event, ctx);
     } catch (error) {
       api.logger.error(
-        `[claw-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${
+        `[agent-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -50,9 +50,9 @@ export function wrapSyncHookFailOpen(
   };
 }
 
-export function registerClawAegisPlugin(
+export function registerAgentAegisPlugin(
   api: OpenClawPluginApi,
-  createRuntime: typeof createClawAegisRuntime = createClawAegisRuntime,
+  createRuntime: typeof createAgentAegisRuntime = createAgentAegisRuntime,
 ): void {
   try {
     const runtime = createRuntime(api);
@@ -97,14 +97,14 @@ export function registerClawAegisPlugin(
       void startSentinelForOpenClaw(api, runtime.engine);
     } catch (error) {
       api.logger.warn(
-        `[claw-aegis] sentinel startup failed; L1 defense continues: ${
+        `[agent-aegis] sentinel startup failed; L1 defense continues: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
     }
   } catch (error) {
     api.logger.error(
-      `[claw-aegis] register failed; fail-open keeps OpenClaw running: ${
+      `[agent-aegis] register failed; fail-open keeps OpenClaw running: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
@@ -144,7 +144,7 @@ async function startSentinelForOpenClaw(
     nativeCfg = _internalReadNativeJudgeConfig(await runtime.readConfig());
   } catch (err) {
     api.logger.warn(
-      `[claw-aegis] native judge config read failed; using defaults: ${String(err)}`,
+      `[agent-aegis] native judge config read failed; using defaults: ${String(err)}`,
     );
   }
   sentinel.registerJudge(
@@ -195,7 +195,7 @@ async function startSentinelForOpenClaw(
     }
   } catch (err) {
     api.logger.warn(
-      `[claw-aegis] probe wiring failed; sentinel keeps running: ${String(err)}`,
+      `[agent-aegis] probe wiring failed; sentinel keeps running: ${String(err)}`,
     );
   }
 
@@ -207,7 +207,7 @@ function warnIfLegacyFrida(config: Record<string, unknown>, api: OpenClawPluginA
   const frida = probes.frida as Record<string, unknown> | undefined;
   if (frida && frida.enabled === true) {
     api.logger.warn(
-      `[claw-aegis] probes.frida is removed in M9. Falling back silently. ` +
+      `[agent-aegis] probes.frida is removed in M9. Falling back silently. ` +
         `Migrate to probes.uprobe + probes.lsm — see SENTINEL_M9_PLAN.md.`,
     );
   }
@@ -316,11 +316,11 @@ function toRegexpList(raw: unknown, anchorStart: boolean): RegExp[] {
 }
 
 export default definePluginEntry({
-  id: "claw-aegis",
-  name: "Claw Aegis",
+  id: "agent-aegis",
+  name: "Agent Aegis",
   description: "Minimal safety guard plugin for prompt, tool, and tool-result hardening.",
-  configSchema: clawAegisPluginConfigDefinition,
+  configSchema: agentAegisPluginConfigDefinition,
   register(api: OpenClawPluginApi) {
-    registerClawAegisPlugin(api);
+    registerAgentAegisPlugin(api);
   },
 });

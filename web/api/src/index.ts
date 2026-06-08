@@ -16,9 +16,9 @@ function expandHome(p: string): string {
 const port = parseInt(process.env.AEGIS_PORT ?? "3800", 10);
 const configDir = expandHome(process.env.AEGIS_CONFIG_DIR ?? pluginRoot);
 const defaultStateDir = pluginRoot.includes(path.join(".openclaw", "extensions"))
-  ? path.resolve(pluginRoot, "..", "..", "plugins", "claw-aegis")
+  ? path.resolve(pluginRoot, "..", "..", "plugins", "agent-aegis")
   : pluginRoot.includes(path.join(".hermes", "plugins"))
-    ? path.resolve(pluginRoot, "..", "..", "claw-aegis-state")
+    ? path.resolve(pluginRoot, "..", "..", "agent-aegis-state")
     : "";
 const stateDir = expandHome(process.env.AEGIS_STATE_DIR ?? defaultStateDir);
 
@@ -39,10 +39,10 @@ const { app } = createServer({
 });
 
 app.listen(finalPort, () => {
-  console.log(`[claw-aegis-web] API server listening on http://localhost:${finalPort}`);
-  console.log(`[claw-aegis-web] App: ${process.env.AEGIS_APP || "openclaw"}`);
+  console.log(`[agent-aegis-web] API server listening on http://localhost:${finalPort}`);
+  console.log(`[agent-aegis-web] App: ${process.env.AEGIS_APP || "openclaw"}`);
   if (finalStateDir) {
-    console.log(`[claw-aegis-web] State dir: ${finalStateDir}`);
+    console.log(`[agent-aegis-web] State dir: ${finalStateDir}`);
   }
-  console.log(`[claw-aegis-web] Config dir: ${finalConfigDir}`);
+  console.log(`[agent-aegis-web] Config dir: ${finalConfigDir}`);
 });

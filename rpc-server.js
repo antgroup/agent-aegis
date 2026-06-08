@@ -1,5 +1,5 @@
 /**
- * JSON-RPC stdio server for ClawAegis.
+ * JSON-RPC stdio server for AgentAegis.
  *
  * Protocol: line-delimited JSON on stdin/stdout.
  *   Request:  {"id":1, "method":"check_before_tool", "params":{...}}

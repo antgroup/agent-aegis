@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Start ClawAegis Web UI for Hermes (standalone mode)
+# Start AgentAegis Web UI for Hermes (standalone mode)
 #
 # This script starts the Hermes-compatible Web API server without requiring
 # the full Hermes agent to be running. Useful for development and debugging.
@@ -10,8 +10,8 @@
 #
 # Environment variables:
 #   AEGIS_PORT        - Web server port (default: 3800)
-#   AEGIS_CONFIG_DIR  - Config directory (default: ~/.hermes/plugins/claw-aegis)
-#   AEGIS_STATE_DIR   - State directory (default: ~/.hermes/claw-aegis-state)
+#   AEGIS_CONFIG_DIR  - Config directory (default: ~/.hermes/plugins/agent-aegis)
+#   AEGIS_STATE_DIR   - State directory (default: ~/.hermes/agent-aegis-state)
 
 set -e
 
@@ -22,17 +22,17 @@ HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 PORT="${1:-${AEGIS_PORT:-3800}}"
 
 # Determine config directory
-if [ -d "$HERMES_HOME/plugins/claw-aegis" ]; then
+if [ -d "$HERMES_HOME/plugins/agent-aegis" ]; then
     # Installed mode - use plugin directory
-    CONFIG_DIR="${AEGIS_CONFIG_DIR:-$HERMES_HOME/plugins/claw-aegis}"
-    PLUGIN_DIR="$HERMES_HOME/plugins/claw-aegis"
+    CONFIG_DIR="${AEGIS_CONFIG_DIR:-$HERMES_HOME/plugins/agent-aegis}"
+    PLUGIN_DIR="$HERMES_HOME/plugins/agent-aegis"
 else
     # Development mode - use repo directory
     CONFIG_DIR="${AEGIS_CONFIG_DIR:-$SCRIPT_DIR/adapters/hermes}"
     PLUGIN_DIR="$SCRIPT_DIR"
 fi
 
-STATE_DIR="${AEGIS_STATE_DIR:-$HERMES_HOME/claw-aegis-state}"
+STATE_DIR="${AEGIS_STATE_DIR:-$HERMES_HOME/agent-aegis-state}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -40,7 +40,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${GREEN}Starting ClawAegis Web UI for Hermes...${NC}"
+echo -e "${GREEN}Starting AgentAegis Web UI for Hermes...${NC}"
 echo ""
 
 # Check if web/api is built

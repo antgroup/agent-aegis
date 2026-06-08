@@ -1,4 +1,4 @@
-module github.com/openclaw/claw-aegis/sentinel/probes/lsm/runner
+module github.com/openclaw/agent-aegis/sentinel/probes/lsm/runner
 
 go 1.22
 

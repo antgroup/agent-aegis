@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 //
-// eBPF LSM hooks for ClawAegis enforce mode.
+// eBPF LSM hooks for AgentAegis enforce mode.
 //
 // 256-byte path buffers and policy keys exceed the BPF stack limit of 512
 // bytes, so all large scratch storage lives in per-CPU array maps.

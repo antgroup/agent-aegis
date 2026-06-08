@@ -1,4 +1,4 @@
-# Build the unified ClawAegis sentinel runner.
+# Build the unified AgentAegis sentinel runner.
 #
 # One Go binary with three modes (--mode=ebpf|uprobe|lsm), each backed by a
 # CO-RE BPF object compiled from bpf/*.bpf.c at build time.

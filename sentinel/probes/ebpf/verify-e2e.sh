@@ -17,13 +17,13 @@
 #   - Repo built (`npm run build`) so the .js artifacts exist
 #
 # Env overrides:
-#   IMG=…    image tag (default: claw-aegis-ebpf-test:latest)
+#   IMG=…    image tag (default: agent-aegis-ebpf-test:latest)
 #
 set -e
 
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$HERE/../../.." && pwd )"
-IMG="${IMG:-claw-aegis-ebpf-test:latest}"
+IMG="${IMG:-agent-aegis-ebpf-test:latest}"
 
 echo "==> building image $IMG (cached after first run)"
 docker build --progress=plain -t "$IMG" "$HERE"

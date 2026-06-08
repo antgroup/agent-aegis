@@ -1,4 +1,4 @@
-# Dockerfile for ClawAegis uprobe probe end-to-end verification.
+# Dockerfile for AgentAegis uprobe probe end-to-end verification.
 #
 # Same base as the eBPF e2e — BCC + Python + Node. The uprobe variant adds
 # a libssl install so SSL_* targets can be exercised when enabled.

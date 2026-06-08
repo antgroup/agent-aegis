@@ -11,7 +11,7 @@ set -e
 
 HERE="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$HERE/../../.." && pwd )"
-IMG="${IMG:-claw-aegis-lsm-test:latest}"
+IMG="${IMG:-agent-aegis-lsm-test:latest}"
 
 echo "==> building image $IMG"
 docker build --progress=plain -t "$IMG" "$HERE"

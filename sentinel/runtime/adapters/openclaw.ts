@@ -22,10 +22,10 @@ export interface OpenClawRuntimeOptions {
   /**
    * Sub-namespace under `api.runtime.state.resolveStateDir()`. Defaults to
    * "sentinel" — keeps probe-event JSONLs separate from the rest of
-   * ClawAegis's persisted state.
+   * AgentAegis's persisted state.
    */
   stateSubdir?: string;
-  /** Plugin id used to look up config. Defaults to "claw-aegis". */
+  /** Plugin id used to look up config. Defaults to "agent-aegis". */
   pluginId?: string;
 }
 
@@ -34,7 +34,7 @@ export function createOpenClawRuntime(
   opts: OpenClawRuntimeOptions = {},
 ): AgentRuntime {
   const logger = wrapLogger(api.logger);
-  const pluginId = opts.pluginId ?? "claw-aegis";
+  const pluginId = opts.pluginId ?? "agent-aegis";
   const stateSubdir = opts.stateSubdir ?? "sentinel";
 
   const ctx: AgentContext = {

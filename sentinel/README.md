@@ -1,6 +1,6 @@
 # sentinel/
 
-Framework-agnostic, low-level defense subsystem for ClawAegis.
+Framework-agnostic, low-level defense subsystem for AgentAegis.
 
 This directory is the home of everything described in
 `../../DEFENSE_TRANSITION_PLAN.md`: an event channel, a judge pipeline, and
@@ -91,7 +91,7 @@ sentinel/
 | `index.ts` | all of the above |
 | `runtime/adapters/openclaw.ts` | additionally `runtime-api` (the framework SDK type) |
 | `runtime/adapters/hermes.ts` | only sentinel types — no framework SDK |
-| `ClawAegis/index.ts` (outside this dir) | adapter factories + judge factories + probe factories |
+| `AgentAegis/index.ts` (outside this dir) | adapter factories + judge factories + probe factories |
 
 These rules are enforced by code review; the structural-type trick in
 l1-bridge prevents the most common slippage automatically (a real `import`
@@ -123,7 +123,7 @@ regression appears, the failing file path maps directly to a milestone.
 
 - **A new judge** (cloud collaboration, LLM voting, custom rule pack):
   implement `Judge` from `judges/base.ts`, call `sentinel.registerJudge(j)`
-  from `ClawAegis/index.ts`. No core changes needed.
+  from `AgentAegis/index.ts`. No core changes needed.
 - **A new probe** (e.g., Windows ETW, audit log replayer):
   implement `Probe` from `probes/types.ts`, register it via
   `sentinel.registerProbe(p)`. Probes live under their own subdirectory of

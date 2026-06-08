@@ -1,4 +1,4 @@
-// ClawAegis sentinel runner (unified, M8).
+// AgentAegis sentinel runner (unified, M8).
 //
 // One static Go binary that handles three modes:
 //   --mode=ebpf    : syscall tracepoint observer (replaces ebpf/runner/probe.py)

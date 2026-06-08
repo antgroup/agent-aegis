@@ -131,7 +131,7 @@ export function startSentinel(runtime, opts = {}) {
         },
         status: () => ({ judges: registry.size(), probes: probes.length }),
     };
-    logger.info(`[claw-aegis] sentinel core constructed (strategy=${strategy}, runtime=${runtime.name}); judges/probes register next`);
+    logger.info(`[agent-aegis] sentinel core constructed (strategy=${strategy}, runtime=${runtime.name}); judges/probes register next`);
     return handle;
 }
 function toApplication(aggregated) {

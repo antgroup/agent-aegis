@@ -5,8 +5,8 @@ import {
   SELF_INTEGRITY_FILENAME,
   DEFENSE_EVENTS_FILENAME,
   SKILL_SCAN_EVENTS_FILENAME,
-} from "@claw-aegis-web/shared";
-import type { TrustedSkillInfo, SelfIntegrityStatus } from "@claw-aegis-web/shared";
+} from "@agent-aegis-web/shared";
+import type { TrustedSkillInfo, SelfIntegrityStatus } from "@agent-aegis-web/shared";
 
 type PersistedTrustedSkillsFile = {
   version: number;

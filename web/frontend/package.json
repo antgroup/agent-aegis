@@ -1,5 +1,5 @@
 {
-  "name": "@claw-aegis-web/frontend",
+  "name": "@agent-aegis-web/frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@claw-aegis-web/shared": "*",
+    "@agent-aegis-web/shared": "*",
     "@tanstack/react-query": "^5.62.0",
     "clsx": "^2.1.1",
     "i18next": "^26.0.3",

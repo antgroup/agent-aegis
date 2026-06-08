@@ -131,7 +131,7 @@ function normalizeSelfIntegrityRecord(raw: unknown): SelfIntegrityRecord | null 
   };
 }
 
-export class ClawAegisState {
+export class AgentAegisState {
   private readonly turnStates = new Map<string, TurnSecurityState>();
   private readonly loopCounters = new Map<string, LoopCounterEntry>();
   private readonly sessionSecrets = new Map<string, ObservedSecretEntry>();

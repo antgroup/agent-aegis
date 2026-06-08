@@ -1,5 +1,5 @@
 /**
- * RPC method handlers for ClawAegis.
+ * RPC method handlers for AgentAegis.
  *
  * This module creates an agent-agnostic runtime that exposes the core
  * security checks as simple request/response methods, without depending
@@ -11,7 +11,7 @@
 import path from "node:path";
 import os from "node:os";
 
-import { type ClawAegisPluginConfig } from "./src/config.js";
+import { type AgentAegisPluginConfig } from "./src/config.js";
 import { AegisDefenseEngine } from "./src/engine.js";
 
 // ---------------------------------------------------------------------------
@@ -52,7 +52,7 @@ export class AegisRpcRuntime {
   // -----------------------------------------------------------------------
 
   async init(params: {
-    config: Partial<ClawAegisPluginConfig>;
+    config: Partial<AgentAegisPluginConfig>;
     stateDir: string;
     pluginRootDir: string;
     skillRoots?: string[];
@@ -105,7 +105,7 @@ export class AegisRpcRuntime {
     }
 
     this.initialized = true;
-    this.engine.logger.info("claw-aegis RPC runtime initialized");
+    this.engine.logger.info("agent-aegis RPC runtime initialized");
     return { ok: true };
   }
 

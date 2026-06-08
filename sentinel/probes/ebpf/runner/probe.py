@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BCC eBPF runner for the ClawAegis sentinel.
+BCC eBPF runner for the AgentAegis sentinel.
 
 Attaches to syscall tracepoints (execve, openat, connect) and emits one
 JSONL object per event to stdout. The Node loader (`sentinel/probes/ebpf/

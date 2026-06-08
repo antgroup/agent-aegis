@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 //
-// eBPF tracepoint + uprobe programs for ClawAegis "ebpf" / "uprobe" modes.
+// eBPF tracepoint + uprobe programs for AgentAegis "ebpf" / "uprobe" modes.
 //
 // sys_event is ~750 bytes (path + argv table) which would overflow the
 // 512-byte BPF stack. We back it with a per-CPU scratch array and submit

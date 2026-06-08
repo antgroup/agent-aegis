@@ -63,7 +63,7 @@ export function createNoopRuntime(opts: NoopRuntimeOptions = {}): AgentRuntime {
   };
 
   const stateDir =
-    opts.stateDir ?? path.join(os.tmpdir(), "claw-aegis-sentinel-noop");
+    opts.stateDir ?? path.join(os.tmpdir(), "agent-aegis-sentinel-noop");
 
   const shutdownCbs: Array<() => Promise<void>> = [];
 

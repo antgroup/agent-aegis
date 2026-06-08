@@ -1,9 +1,9 @@
 """
-Tool handler wrappers for ClawAegis on Hermes.
+Tool handler wrappers for AgentAegis on Hermes.
 
 Intercepts high-risk tool handlers (terminal, write_file, etc.) by
 replacing them in the Hermes tool registry with safety-checked wrappers
-that consult the ClawAegis RPC engine before executing.
+that consult the AgentAegis RPC engine before executing.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, Optional
 
 from .bridge import AegisEngine
 
-logger = logging.getLogger("claw-aegis.wrappers")
+logger = logging.getLogger("agent-aegis.wrappers")
 
 # Tools to wrap and the RPC method to call for each.
 # All use check_before_tool; the tool name and args are passed through.
@@ -35,10 +35,10 @@ def _make_safe_handler(
     session_key_fn: Callable[[], str],
     run_id_fn: Callable[[], str],
 ) -> Callable:
-    """Create a wrapped handler that checks ClawAegis before executing."""
+    """Create a wrapped handler that checks AgentAegis before executing."""
 
     def sync_handler(args: dict, **kwargs: Any) -> str:
-        # Consult ClawAegis
+        # Consult AgentAegis
         try:
             result = engine.call("check_before_tool", {
                 "tool": tool_name,
@@ -48,25 +48,25 @@ def _make_safe_handler(
             })
         except Exception as exc:
             # Fail-open: if RPC is down, allow the tool call
-            logger.warning("ClawAegis check failed for %s, allowing: %s", tool_name, exc)
+            logger.warning("AgentAegis check failed for %s, allowing: %s", tool_name, exc)
             return original_handler(args, **kwargs)
 
         if result.get("block"):
             blocked_msg = {
-                "error": f"[ClawAegis] Blocked: {result.get('reason', 'security violation')}",
+                "error": f"[AgentAegis] Blocked: {result.get('reason', 'security violation')}",
                 "defense": result.get("defense", "unknown"),
                 "severity": result.get("severity", "unknown"),
                 "mode": result.get("mode", "enforce"),
             }
             logger.warning(
-                "ClawAegis blocked %s: defense=%s reason=%s",
+                "AgentAegis blocked %s: defense=%s reason=%s",
                 tool_name, result.get("defense"), result.get("reason"),
             )
             return json.dumps(blocked_msg, ensure_ascii=False)
 
         if result.get("mode") == "observe" and result.get("defense"):
             logger.info(
-                "ClawAegis observed %s: defense=%s reason=%s",
+                "AgentAegis observed %s: defense=%s reason=%s",
                 tool_name, result.get("defense"), result.get("reason"),
             )
 
@@ -83,18 +83,18 @@ def _make_safe_handler(
                 "runId": run_id_fn(),
             })
         except Exception as exc:
-            logger.warning("ClawAegis check failed for %s, allowing: %s", tool_name, exc)
+            logger.warning("AgentAegis check failed for %s, allowing: %s", tool_name, exc)
             return await original_handler(args, **kwargs)
 
         if result.get("block"):
             blocked_msg = {
-                "error": f"[ClawAegis] Blocked: {result.get('reason', 'security violation')}",
+                "error": f"[AgentAegis] Blocked: {result.get('reason', 'security violation')}",
                 "defense": result.get("defense", "unknown"),
                 "severity": result.get("severity", "unknown"),
                 "mode": result.get("mode", "enforce"),
             }
             logger.warning(
-                "ClawAegis blocked %s: defense=%s reason=%s",
+                "AgentAegis blocked %s: defense=%s reason=%s",
                 tool_name, result.get("defense"), result.get("reason"),
             )
             return json.dumps(blocked_msg, ensure_ascii=False)
@@ -109,7 +109,7 @@ def wrap_dangerous_tools(
     session_key_fn: Callable[[], str],
     run_id_fn: Callable[[], str],
 ) -> int:
-    """Replace handlers for high-risk tools with ClawAegis-checked wrappers.
+    """Replace handlers for high-risk tools with AgentAegis-checked wrappers.
 
     This must be called after Hermes has loaded all built-in tools
     (i.e. during plugin register(), which runs after tool discovery).
@@ -131,7 +131,7 @@ def wrap_dangerous_tools(
             continue
 
         # Check if already wrapped (avoid double-wrapping)
-        if hasattr(entry.handler, '_claw_aegis_wrapped'):
+        if hasattr(entry.handler, '_agent_aegis_wrapped'):
             logger.debug("Tool %s already wrapped, skipping", tool_name)
             wrapped_count += 1
             continue
@@ -151,7 +151,7 @@ def wrap_dangerous_tools(
         )
 
         # Mark as wrapped to prevent double-wrapping
-        safe_handler._claw_aegis_wrapped = True
+        safe_handler._agent_aegis_wrapped = True
 
         # Replace in registry via deregister + register (clean approach)
         schema = entry.schema
@@ -176,7 +176,7 @@ def wrap_dangerous_tools(
                 emoji=emoji,
                 max_result_size_chars=max_result_size,
             )
-            logger.info("Wrapped tool %s with ClawAegis safety check", tool_name)
+            logger.info("Wrapped tool %s with AgentAegis safety check", tool_name)
             wrapped_count += 1
         except Exception as exc:
             logger.error("Failed to wrap tool %s: %s", tool_name, exc)

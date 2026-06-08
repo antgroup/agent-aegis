@@ -42,7 +42,7 @@ function createFakeApi(opts: {
       registeredHooks.set(hook, list);
     },
     pluginConfig: opts.pluginConfig,
-    getPluginConfig: (id) => (id === "claw-aegis" ? opts.getterConfig : undefined),
+    getPluginConfig: (id) => (id === "agent-aegis" ? opts.getterConfig : undefined),
     resolvePath: (p) => p,
   };
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BCC uprobe runner for the ClawAegis sentinel.
+BCC uprobe runner for the AgentAegis sentinel.
 
 Unlike sibling tracepoint runner (../../ebpf/runner/probe.py), this script
 attaches uprobes on **user-space symbols** in the configured libc (and

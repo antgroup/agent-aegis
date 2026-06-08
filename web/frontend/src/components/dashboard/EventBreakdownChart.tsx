@@ -7,7 +7,7 @@ import {
   Legend,
 } from "recharts";
 import { useTranslation } from "react-i18next";
-import type { SecurityEvent } from "@claw-aegis-web/shared";
+import type { SecurityEvent } from "@agent-aegis-web/shared";
 
 interface Props {
   events: SecurityEvent[];

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 export function createOpenClawRuntime(api, opts = {}) {
     const logger = wrapLogger(api.logger);
-    const pluginId = opts.pluginId ?? "claw-aegis";
+    const pluginId = opts.pluginId ?? "agent-aegis";
     const stateSubdir = opts.stateSubdir ?? "sentinel";
     const ctx = {
         sessionKey: "default",

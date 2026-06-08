@@ -1,4 +1,4 @@
-import type { SkillScanEvent } from "@claw-aegis-web/shared";
+import type { SkillScanEvent } from "@agent-aegis-web/shared";
 
 const MAX_EVENTS = 1000;
 

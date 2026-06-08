@@ -1,6 +1,6 @@
 import { definePluginEntry } from "./runtime-api.js";
-import { clawAegisPluginConfigDefinition } from "./src/config.js";
-import { createClawAegisRuntime } from "./src/handlers.js";
+import { agentAegisPluginConfigDefinition } from "./src/config.js";
+import { createAgentAegisRuntime } from "./src/handlers.js";
 import { startSentinel } from "./sentinel/index.js";
 import { createL1BridgeJudge } from "./sentinel/judges/l1-bridge.js";
 import { createNativeJudge } from "./sentinel/judges/native.js";
@@ -14,7 +14,7 @@ export function wrapHookFailOpen(api, hookName, handler) {
             return await handler(event, ctx);
         }
         catch (error) {
-            api.logger.error(`[claw-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${error instanceof Error ? error.message : String(error)}`);
+            api.logger.error(`[agent-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${error instanceof Error ? error.message : String(error)}`);
             return undefined;
         }
     };
@@ -25,12 +25,12 @@ export function wrapSyncHookFailOpen(api, hookName, handler) {
             return handler(event, ctx);
         }
         catch (error) {
-            api.logger.error(`[claw-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${error instanceof Error ? error.message : String(error)}`);
+            api.logger.error(`[agent-aegis] ${hookName} failed; fail-open keeps OpenClaw running: ${error instanceof Error ? error.message : String(error)}`);
             return undefined;
         }
     };
 }
-export function registerClawAegisPlugin(api, createRuntime = createClawAegisRuntime) {
+export function registerAgentAegisPlugin(api, createRuntime = createAgentAegisRuntime) {
     try {
         const runtime = createRuntime(api);
         api.on("gateway_start", wrapHookFailOpen(api, "gateway_start", runtime.hooks.gateway_start));
@@ -49,11 +49,11 @@ export function registerClawAegisPlugin(api, createRuntime = createClawAegisRunt
             void startSentinelForOpenClaw(api, runtime.engine);
         }
         catch (error) {
-            api.logger.warn(`[claw-aegis] sentinel startup failed; L1 defense continues: ${error instanceof Error ? error.message : String(error)}`);
+            api.logger.warn(`[agent-aegis] sentinel startup failed; L1 defense continues: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
     catch (error) {
-        api.logger.error(`[claw-aegis] register failed; fail-open keeps OpenClaw running: ${error instanceof Error ? error.message : String(error)}`);
+        api.logger.error(`[agent-aegis] register failed; fail-open keeps OpenClaw running: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 /**
@@ -85,7 +85,7 @@ async function startSentinelForOpenClaw(api, engine) {
         nativeCfg = _internalReadNativeJudgeConfig(await runtime.readConfig());
     }
     catch (err) {
-        api.logger.warn(`[claw-aegis] native judge config read failed; using defaults: ${String(err)}`);
+        api.logger.warn(`[agent-aegis] native judge config read failed; using defaults: ${String(err)}`);
     }
     sentinel.registerJudge(createNativeJudge({
         sensitivePathPatterns: nativeCfg.sensitivePathPatterns,
@@ -126,7 +126,7 @@ async function startSentinelForOpenClaw(api, engine) {
         }
     }
     catch (err) {
-        api.logger.warn(`[claw-aegis] probe wiring failed; sentinel keeps running: ${String(err)}`);
+        api.logger.warn(`[agent-aegis] probe wiring failed; sentinel keeps running: ${String(err)}`);
     }
     return sentinel;
 }
@@ -134,7 +134,7 @@ function warnIfLegacyFrida(config, api) {
     const probes = (config.probes ?? {});
     const frida = probes.frida;
     if (frida && frida.enabled === true) {
-        api.logger.warn(`[claw-aegis] probes.frida is removed in M9. Falling back silently. ` +
+        api.logger.warn(`[agent-aegis] probes.frida is removed in M9. Falling back silently. ` +
             `Migrate to probes.uprobe + probes.lsm — see SENTINEL_M9_PLAN.md.`);
     }
 }
@@ -211,11 +211,11 @@ function toRegexpList(raw, anchorStart) {
     return out;
 }
 export default definePluginEntry({
-    id: "claw-aegis",
-    name: "Claw Aegis",
+    id: "agent-aegis",
+    name: "Agent Aegis",
     description: "Minimal safety guard plugin for prompt, tool, and tool-result hardening.",
-    configSchema: clawAegisPluginConfigDefinition,
+    configSchema: agentAegisPluginConfigDefinition,
     register(api) {
-        registerClawAegisPlugin(api);
+        registerAgentAegisPlugin(api);
     },
 });

@@ -1,4 +1,4 @@
-# Dockerfile for ClawAegis LSM enforce e2e.
+# Dockerfile for AgentAegis LSM enforce e2e.
 #
 # Builds the Go runner inside the container so we don't depend on the host
 # toolchain. Requires kernel ≥ 5.7 with CONFIG_BPF_LSM=y at runtime —

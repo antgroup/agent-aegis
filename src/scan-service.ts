@@ -16,7 +16,7 @@ import {
   SKILL_SCAN_TIMEOUT_MS,
 } from "./config.js";
 import { scanSkillText } from "./scan-worker.js";
-import { ClawAegisState } from "./state.js";
+import { AgentAegisState } from "./state.js";
 import type {
   AegisLogger,
   SkillAssessmentRecord,
@@ -92,7 +92,7 @@ export class SkillScanService {
 
   constructor(
     private readonly params: {
-      state: ClawAegisState;
+      state: AgentAegisState;
       logger: AegisLogger;
       now?: () => number;
       runner?: (request: SkillScanRequest) => Promise<SkillScanResult>;
@@ -134,21 +134,21 @@ export class SkillScanService {
   }
 
   private logSkillScanStart(meta: SkillScanLogMeta): void {
-    this.params.logger.info("claw-aegis: 开始执行 skill 扫描", {
+    this.params.logger.info("agent-aegis: 开始执行 skill 扫描", {
       event: "skill_scan_started",
       ...meta,
     });
   }
 
   private logSkillScanFinish(meta: SkillScanLogMeta): void {
-    this.params.logger.info("claw-aegis: skill 扫描结束", {
+    this.params.logger.info("agent-aegis: skill 扫描结束", {
       event: "skill_scan_finished",
       ...meta,
     });
   }
 
   private logSkillScanResult(meta: SkillScanLogMeta, level: "info" | "warn" = "info"): void {
-    const message = "claw-aegis: skill 扫描结果";
+    const message = "agent-aegis: skill 扫描结果";
     const payload = {
       event: "skill_scan_result",
       ...meta,
@@ -215,7 +215,7 @@ export class SkillScanService {
       return;
     }
     this.workerSupported = false;
-    this.params.logger.warn("claw-aegis: 已回退到内联 skill 扫描", {
+    this.params.logger.warn("agent-aegis: 已回退到内联 skill 扫描", {
       event: "skill_worker_fallback",
       reason,
     });
@@ -273,7 +273,7 @@ export class SkillScanService {
       this.cooldownUntil = now + SKILL_SCAN_COOLDOWN_MS;
     }
     this.syncWorkerHealth();
-    this.params.logger.warn("claw-aegis: skill 扫描已降级", {
+    this.params.logger.warn("agent-aegis: skill 扫描已降级", {
       event: "skill_scan_failure",
       reason: error instanceof Error ? error.message : String(error),
       crashCount: this.failureTimestamps.length,
@@ -295,7 +295,7 @@ export class SkillScanService {
     this.stopped = false;
     this.clearCooldownIfElapsed();
     this.syncWorkerHealth();
-    this.params.logger.info("claw-aegis: skill 扫描服务已就绪", {
+    this.params.logger.info("agent-aegis: skill 扫描服务已就绪", {
       event: "skill_scan_service_ready",
     });
   }
@@ -416,7 +416,7 @@ export class SkillScanService {
         this.clearCooldownIfElapsed();
         if (this.isCooldownActive()) {
           skippedCooldownCount += 1;
-          this.params.logger.warn("claw-aegis: 冷却期间已跳过本轮 skill 扫描", {
+          this.params.logger.warn("agent-aegis: 冷却期间已跳过本轮 skill 扫描", {
             event: "skill_scan_skipped",
             phase: "turn_review",
             state: "cooldown",
@@ -461,7 +461,7 @@ export class SkillScanService {
         await this.params.state.persistTrustedSkills();
       } catch (error) {
         hadErrors = true;
-        this.params.logger.error("claw-aegis: 持久化 trusted skill 缓存失败", {
+        this.params.logger.error("agent-aegis: 持久化 trusted skill 缓存失败", {
           event: "skill_scan_persist_failed",
           phase: "turn_review",
           reason: error instanceof Error ? error.message : String(error),
@@ -479,7 +479,7 @@ export class SkillScanService {
             ? "completed_with_cooldown"
             : "clear";
     if (riskyAssessments.length > 0) {
-      this.params.logger.warn("claw-aegis: 检测到高风险 skill", {
+      this.params.logger.warn("agent-aegis: 检测到高风险 skill", {
         event: "skill_risk_detected",
         phase: "turn_review",
         riskySkillCount: riskyAssessments.length,
@@ -571,7 +571,7 @@ export class SkillScanService {
     this.clearCooldownIfElapsed();
     if (this.isCooldownActive()) {
       const durationMs = this.now() - startedAt;
-      this.params.logger.warn("claw-aegis: 冷却期间已跳过 skill 扫描", {
+      this.params.logger.warn("agent-aegis: 冷却期间已跳过 skill 扫描", {
         event: "skill_scan_skipped",
         state: "cooldown",
         path: filePath,
@@ -696,7 +696,7 @@ export class SkillScanService {
     }
     if (this.queue.length >= SKILL_SCAN_QUEUE_MAX) {
       const durationMs = this.now() - startedAt;
-      this.params.logger.warn("claw-aegis: 由于背压已跳过 skill 扫描", {
+      this.params.logger.warn("agent-aegis: 由于背压已跳过 skill 扫描", {
         event: "skill_scan_backpressure",
         path: filePath,
         state: "scanSkippedDueToBackpressure",
@@ -803,7 +803,7 @@ export class SkillScanService {
       if (assessment.trusted) {
         await this.params.state.persistTrustedSkills();
       }
-      this.params.logger.debug?.("claw-aegis: 已完成 skill 扫描", {
+      this.params.logger.debug?.("agent-aegis: 已完成 skill 扫描", {
         event: "skill_scan_complete",
         path: next.path,
         trusted: result.trusted,
@@ -986,7 +986,7 @@ export class SkillScanService {
         }
       });
       this.worker = worker;
-      this.params.logger.info("claw-aegis: skill worker 已启动", {
+      this.params.logger.info("agent-aegis: skill worker 已启动", {
         event: "skill_worker_started",
       });
       return worker;

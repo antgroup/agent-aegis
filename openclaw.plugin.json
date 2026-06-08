@@ -1,14 +1,14 @@
 {
-  "id": "claw-aegis",
+  "id": "agent-aegis",
   "activation": {
     "onStartup": true
   },
-  "name": "Claw Aegis",
+  "name": "Agent Aegis",
   "description": "Minimal safety guard plugin for OpenClaw prompt, tool, and tool-result flows.",
   "uiHints": {
     "allDefensesEnabled": {
       "label": "Enable All Defenses",
-      "help": "Master switch for every claw-aegis defense below."
+      "help": "Master switch for every agent-aegis defense below."
     },
     "defaultBlockingMode": {
       "label": "Default Blocking Mode",
@@ -127,13 +127,13 @@
     },
     "skillRoots": {
       "label": "Additional Skill Roots (Ignored)",
-      "help": "Deprecated. claw-aegis v1 now scans only ~/.openclaw/skills and ~/.openclaw/workspace/skills.",
+      "help": "Deprecated. agent-aegis v1 now scans only ~/.openclaw/skills and ~/.openclaw/workspace/skills.",
       "advanced": true,
       "placeholder": "/path/to/skills"
     },
     "extraProtectedRoots": {
       "label": "Additional Protected Roots",
-      "help": "Legacy compatibility alias of protectedPaths. Extra directories that claw-aegis should treat as protected paths.",
+      "help": "Legacy compatibility alias of protectedPaths. Extra directories that agent-aegis should treat as protected paths.",
       "advanced": true,
       "placeholder": "/path/to/protected"
     },
