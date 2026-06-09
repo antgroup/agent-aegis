@@ -91,12 +91,24 @@ echo ""
 
 # 3. Create plugin directory
 echo "==> Installing plugin to Hermes..."
-mkdir -p "$HERMES_PLUGIN_DIR"
+# Backups go OUTSIDE ~/.hermes/plugins/. Hermes discovers EVERY directory under
+# plugins/ as a plugin, so a backup left in there (e.g. agent-aegis.backup.<ts>)
+# loads as a duplicate, stale plugin and can shadow the fresh install.
+BACKUP_ROOT="${HOME}/.hermes/agent-aegis-backups"
 
-# Backup existing installation if present
+# Self-heal: relocate any legacy backups a previous installer left inside plugins/.
+for _legacy in "${HERMES_PLUGIN_DIR}".backup.*; do
+    [ -e "$_legacy" ] || continue
+    mkdir -p "$BACKUP_ROOT"
+    echo "    Relocating stale in-plugins backup out of plugins/: $_legacy"
+    mv "$_legacy" "${BACKUP_ROOT}/$(basename "$_legacy")"
+done
+
+# Backup an existing real installation (to BACKUP_ROOT, not inside plugins/).
 if [ -d "$HERMES_PLUGIN_DIR" ] && [ ! -L "$HERMES_PLUGIN_DIR" ]; then
-    BACKUP_DIR="${HERMES_PLUGIN_DIR}.backup.$(date +%Y%m%d%H%M%S)"
-    echo "    Backing up existing directory to: $BACKUP_DIR"
+    mkdir -p "$BACKUP_ROOT"
+    BACKUP_DIR="${BACKUP_ROOT}/agent-aegis.$(date +%Y%m%d%H%M%S)"
+    echo "    Backing up existing install to: $BACKUP_DIR"
     mv "$HERMES_PLUGIN_DIR" "$BACKUP_DIR"
 fi
 
