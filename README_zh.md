@@ -131,6 +131,14 @@ cd AgentAegis
 
 ---
 
+## ⚠️ 运维提示
+
+- **改配置后需重启。** 两种运行时都只在启动时读取防御配置。改完配置文件（Hermes 是 `config.yaml`，OpenClaw 是 `openclaw.plugin.json`）或在 WebUI 调整设置后，请重启 agent —— 运行中的会话仍用旧配置。（Hermes 还要确认旧的 `rpc-server.js` 子进程已退出再重启。）
+- **`observe` 只记录、`enforce` 才拦截。** observe 模式只记录命中但放行，只有 enforce 会真正拦截。建议先以 observe 上线，再把高置信度防御提升到 enforce。
+- **Hermes 必须加载插件才能防御。** 用 gateway / 交互聊天模式 —— `hermes -z`（单轮）不加载插件，防御不会运行。启动日志应出现 `N high-risk tools wrapped`（N > 0），这才表示工具调用拦截已武装。可设 `approvals.mode: off` 让 AgentAegis 独占拦截。
+
+---
+
 ## ✨ 核心特性
 
 ### 运行时防御
