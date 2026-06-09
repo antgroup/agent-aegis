@@ -1,4 +1,4 @@
-import { promises as fs } from "node:fs";
+import { promises as fs, existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import yaml from "js-yaml";
@@ -18,19 +18,30 @@ export class ConfigService {
   private lastMtime: Date | null = null;
 
   constructor(configDir: string) {
-    // Detect environment: if config.yaml exists or AEGIS_APP=hermes, use YAML
+    // Pick the config file by runtime. Hermes installs `config.yaml`; OpenClaw
+    // ships `openclaw.plugin.json`. Detect by what is actually on disk so it works
+    // no matter how the WebUI is launched (the Hermes launcher does not export
+    // AEGIS_APP), with AEGIS_APP kept as an explicit override.
     const yamlPath = path.join(configDir, "config.yaml");
     const jsonPath = path.join(configDir, "openclaw.plugin.json");
-    
-    // We check for config.yaml existence synchronously if possible, or assume based on env
-    if (process.env.AEGIS_APP === "hermes") {
-        this.configPath = yamlPath;
-        this.isYaml = true;
+
+    const envApp = process.env.AEGIS_APP;
+    let useYaml: boolean;
+    if (envApp === "hermes") {
+        useYaml = true;
+    } else if (envApp === "openclaw") {
+        useYaml = false;
+    } else if (existsSync(yamlPath)) {
+        // Hermes layout: config.yaml present (and no openclaw.plugin.json).
+        useYaml = true;
     } else {
-        // Default to JSON for OpenClaw, but fallback to YAML if config.yaml is present
-        this.configPath = jsonPath;
-        this.isYaml = false;
+        // OpenClaw layout (openclaw.plugin.json present), or a fresh dir — default
+        // to OpenClaw's JSON layout.
+        useYaml = false;
     }
+
+    this.configPath = useYaml ? yamlPath : jsonPath;
+    this.isYaml = useYaml;
   }
 
   getConfigPath(): string {

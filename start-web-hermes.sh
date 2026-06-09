@@ -87,6 +87,7 @@ EOF
 fi
 
 # Export environment variables
+export AEGIS_APP="hermes"          # tells the WebUI to read/write config.yaml (not openclaw.plugin.json)
 export AEGIS_PORT="$PORT"
 export AEGIS_CONFIG_DIR="$CONFIG_DIR"
 export AEGIS_STATE_DIR="$STATE_DIR"
