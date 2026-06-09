@@ -1,5 +1,5 @@
 import { definePluginEntry, type OpenClawPluginApi } from "./runtime-api.js";
-import { clawAegisPluginConfigDefinition } from "./src/config.js";
+import { agentAegisPluginConfigDefinition } from "./src/config.js";
 import { createAgentAegisRuntime } from "./src/handlers.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- handlers have heterogeneous signatures; `any` is needed for contravariance
@@ -98,7 +98,7 @@ export default definePluginEntry({
   id: "agent-aegis",
   name: "Agent Aegis",
   description: "Minimal safety guard plugin for prompt, tool, and tool-result hardening.",
-  configSchema: clawAegisPluginConfigDefinition,
+  configSchema: agentAegisPluginConfigDefinition,
   register(api: OpenClawPluginApi) {
     registerAgentAegisPlugin(api);
   },

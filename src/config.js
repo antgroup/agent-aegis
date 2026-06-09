@@ -40,7 +40,7 @@ const defaultDefenseModeSchema = {
     enum: [...DEFENSE_MODES],
     default: "enforce",
 };
-export const clawAegisPluginConfigSchema = {
+export const agentAegisPluginConfigSchema = {
     type: "object",
     additionalProperties: false,
     properties: {
@@ -94,7 +94,7 @@ export const clawAegisPluginConfigSchema = {
         },
     },
 };
-export const clawAegisPluginUiHints = {
+export const agentAegisPluginUiHints = {
     allDefensesEnabled: {
         label: "Enable All Defenses",
         help: "Master switch for every agent-aegis defense below.",
@@ -227,9 +227,9 @@ export const clawAegisPluginUiHints = {
         placeholder: "/path/to/protected",
     },
 };
-export const clawAegisPluginConfigDefinition = {
-    jsonSchema: clawAegisPluginConfigSchema,
-    uiHints: clawAegisPluginUiHints,
+export const agentAegisPluginConfigDefinition = {
+    jsonSchema: agentAegisPluginConfigSchema,
+    uiHints: agentAegisPluginUiHints,
 };
 function normalizeStringList(value, resolvePath) {
     if (!Array.isArray(value)) {

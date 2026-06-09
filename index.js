@@ -1,5 +1,5 @@
 import { definePluginEntry } from "./runtime-api.js";
-import { clawAegisPluginConfigDefinition } from "./src/config.js";
+import { agentAegisPluginConfigDefinition } from "./src/config.js";
 import { createAgentAegisRuntime } from "./src/handlers.js";
 export function wrapHookFailOpen(api, hookName, handler) {
     return async (event, ctx) => {
@@ -47,7 +47,7 @@ export default definePluginEntry({
     id: "agent-aegis",
     name: "Agent Aegis",
     description: "Minimal safety guard plugin for prompt, tool, and tool-result hardening.",
-    configSchema: clawAegisPluginConfigDefinition,
+    configSchema: agentAegisPluginConfigDefinition,
     register(api) {
         registerAgentAegisPlugin(api);
     },

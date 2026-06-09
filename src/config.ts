@@ -90,7 +90,7 @@ const defaultDefenseModeSchema = {
   default: "enforce",
 } as const;
 
-export const clawAegisPluginConfigSchema = {
+export const agentAegisPluginConfigSchema = {
   type: "object",
   additionalProperties: false,
   properties: {
@@ -145,7 +145,7 @@ export const clawAegisPluginConfigSchema = {
   },
 } satisfies OpenClawPluginConfigSchema["jsonSchema"];
 
-export const clawAegisPluginUiHints = {
+export const agentAegisPluginUiHints = {
   allDefensesEnabled: {
     label: "Enable All Defenses",
     help: "Master switch for every agent-aegis defense below.",
@@ -279,9 +279,9 @@ export const clawAegisPluginUiHints = {
   },
 } satisfies NonNullable<OpenClawPluginConfigSchema["uiHints"]>;
 
-export const clawAegisPluginConfigDefinition = {
-  jsonSchema: clawAegisPluginConfigSchema,
-  uiHints: clawAegisPluginUiHints,
+export const agentAegisPluginConfigDefinition = {
+  jsonSchema: agentAegisPluginConfigSchema,
+  uiHints: agentAegisPluginUiHints,
 } satisfies OpenClawPluginConfigSchema;
 
 function normalizeStringList(value: unknown, resolvePath: (input: string) => string): string[] {
