@@ -221,10 +221,14 @@ verdict is persisted as JSONL and forwarded to the **WebUI Events page**.
   intercept (the operation runs). Safe for rollout / data collection.
 - **enforce** — the `lsm` probe denies high-severity syscalls in-kernel.
 
-### Enable
+### Enable — OpenClaw and Hermes
 
-Kernel probes are **opt-in** (Linux only; require root + BCC). Add to
-`openclaw.plugin.json` `userConfig` (or toggle on the WebUI Config page):
+Kernel probes are **opt-in** (Linux only). The **same** sentinel subsystem runs
+on both runtimes — OpenClaw starts it from the native plugin, Hermes from the
+Node RPC server the Python plugin spawns — so the config keys are identical.
+
+**OpenClaw** — edit `openclaw.plugin.json` `userConfig` (or the WebUI Config page),
+then restart the gateway:
 
 ```json
 {
@@ -238,14 +242,29 @@ Kernel probes are **opt-in** (Linux only; require root + BCC). Add to
 }
 ```
 
-For active in-kernel blocking set `nativeJudge.mode: "enforce"` and
-`probes.lsm.enabled: true`. Extend coverage without code via
+**Hermes** — edit `~/.hermes/plugins/agent-aegis/config.yaml` (the installer ships
+this block, disabled), then restart Hermes:
+
+```yaml
+nativeJudge:
+  mode: observe
+probes:
+  ebpf:
+    enabled: true
+  lsm:
+    enabled: false
+    minSeverity: high
+```
+
+For active in-kernel blocking set `nativeJudge.mode: enforce` **and**
+`probes.lsm.enabled: true` (the `ebpf` tracepoint probe is observe-only; `lsm`
+is what blocks in-kernel). Extend coverage without code via
 `nativeJudge.sensitivePaths` / `nativeJudge.scratchDirs`.
 
-**Requirements:** a Linux kernel with eBPF, root, BCC (`bpfcc-tools`,
+**Requirements (both):** a Linux kernel with eBPF, root, BCC (`bpfcc-tools`,
 `python3-bpfcc`), and `/sys/kernel/debug` mounted. On macOS/Windows use the
-Docker harnesses below (they run a privileged Linux container via
-OrbStack / Docker Desktop).
+Docker harnesses below (privileged Linux container via OrbStack / Docker Desktop).
+Probes fail-open — if they can't attach, it's logged and the agent keeps running.
 
 ### Verify (one command, any OS with Docker)
 
@@ -256,7 +275,8 @@ npm run e2e:uprobe  # user-space libc / OpenSSL symbol probe
 
 # Observe mode + WebUI: detect-but-don't-block, forward detections to the
 # WebUI on http://localhost:3800, and open the browser:
-npm run observe:live
+npm run observe:live      # OpenClaw-style wiring (noop runtime + eBPF probe)
+npm run observe:hermes    # drives the REAL Hermes RPC init path (rpc-server.js)
 ```
 
 Each harness builds a privileged Linux container, triggers `cat /etc/shadow`,

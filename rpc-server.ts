@@ -62,9 +62,22 @@ rl.on("line", async (line: string) => {
   writeLine(response);
 });
 
-rl.on("close", () => {
+async function shutdown(): Promise<void> {
+  try {
+    await runtime.stop();
+  } catch {
+    // best-effort — stop sentinel probes (and their subprocesses) before exit
+  }
   process.exit(0);
+}
+
+rl.on("close", () => {
+  void shutdown();
 });
 
-process.on("SIGTERM", () => process.exit(0));
-process.on("SIGINT", () => process.exit(0));
+process.on("SIGTERM", () => {
+  void shutdown();
+});
+process.on("SIGINT", () => {
+  void shutdown();
+});

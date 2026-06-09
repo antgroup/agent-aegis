@@ -1,3 +1,5 @@
+import path from "node:path";
+import { appendWebuiDefenseEvent } from "../../channel/webui-bridge.js";
 const stderrLogger = {
     debug: (m, ...a) => process.stderr.write(`[sentinel.hermes] DEBUG ${format(m, a)}\n`),
     info: (m, ...a) => process.stderr.write(`[sentinel.hermes] INFO  ${format(m, a)}\n`),
@@ -47,6 +49,7 @@ export function createHermesRuntime(opts) {
         platform: detectPlatform(),
         ...opts.capabilities,
     };
+    const webuiEventsFile = opts.webuiEventsFile ?? path.join(opts.stateDir, "defense-events.jsonl");
     const runtime = {
         name: "hermes",
         logger,
@@ -69,6 +72,16 @@ export function createHermesRuntime(opts) {
         },
         readConfig: async () => opts.config ?? {},
         getStateDir: () => opts.stateDir,
+        onSentinelEvent: (event, verdict) => {
+            // Forward each detection into the Hermes WebUI's defense-events.jsonl so
+            // kernel-level (eBPF/uprobe/LSM) events show up on the Events page.
+            try {
+                appendWebuiDefenseEvent(webuiEventsFile, event, verdict);
+            }
+            catch (err) {
+                logger.warn(`sentinel webui forward failed: ${String(err)}`);
+            }
+        },
     };
     function pushContext(update) {
         if (update.sessionKey !== undefined)

@@ -127,6 +127,15 @@ echo "    Copying runtime dependencies..."
 mkdir -p "$HERMES_PLUGIN_DIR/src"
 cp "$REPO_ROOT/src/"*.js "$HERMES_PLUGIN_DIR/src/"
 
+# Copy the sentinel subsystem (kernel-level eBPF/uprobe/LSM probes + native judge)
+# so the RPC server can start it. Ship the compiled .js + the probe runners
+# (probe.py, the LSM Go/C runner); drop the TS sources and unit tests.
+echo "    Copying sentinel subsystem..."
+mkdir -p "$HERMES_PLUGIN_DIR/sentinel"
+cp -r "$REPO_ROOT/sentinel/"* "$HERMES_PLUGIN_DIR/sentinel/"
+rm -rf "$HERMES_PLUGIN_DIR/sentinel/__tests__"
+find "$HERMES_PLUGIN_DIR/sentinel" -name '*.ts' -delete 2>/dev/null || true
+
 # Copy Web API
 echo "    Copying Web API..."
 mkdir -p "$HERMES_PLUGIN_DIR/web"
@@ -195,6 +204,25 @@ webPort: 3800
 # --- Protected plugins ---
 # protectedPlugins:
 #   - audit-guard
+
+# --- Kernel-level defense (eBPF / sentinel) — opt-in, Linux only ---
+# Requires root + BCC (bpfcc-tools, python3-bpfcc) + /sys/kernel/debug mounted.
+# Same subsystem OpenClaw runs; probes fail-open (logged) if they cannot attach.
+nativeJudge:
+  # observe = detect + log + WebUI, never block; enforce = LSM blocks in-kernel.
+  mode: observe
+  # sensitivePaths:        # extra paths to flag (substring match)
+  #   - /etc/shadow
+  # scratchDirs:           # execve from these dirs => kernel-escape
+  #   - /tmp/
+probes:
+  ebpf:
+    enabled: false         # true => system-wide syscall observer (eBPF tracepoints)
+  uprobe:
+    enabled: false         # true => user-space libc/OpenSSL symbol probe
+  lsm:
+    enabled: false         # true (+ nativeJudge.mode: enforce) => in-kernel block
+    minSeverity: high
 YAML
     echo "    Created: $CONFIG_FILE"
 else

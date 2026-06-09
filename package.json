@@ -34,7 +34,8 @@
     "e2e:ebpf": "bash sentinel/probes/ebpf/verify-e2e.sh",
     "e2e:uprobe": "bash sentinel/probes/uprobe/verify-e2e.sh",
     "e2e:lsm": "bash sentinel/probes/lsm/verify-e2e.sh",
-    "observe:live": "bash sentinel/probes/ebpf/observe-live.sh"
+    "observe:live": "bash sentinel/probes/ebpf/observe-live.sh",
+    "observe:hermes": "bash sentinel/probes/ebpf/observe-hermes.sh"
   },
   "devDependencies": {
     "@types/node": "^25.9.0",

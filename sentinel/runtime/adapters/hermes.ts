@@ -1,3 +1,5 @@
+import path from "node:path";
+import { appendWebuiDefenseEvent } from "../../channel/webui-bridge.js";
 import type {
   AgentContext,
   AgentLogger,
@@ -28,6 +30,12 @@ export interface HermesRuntimeOptions {
   logger?: AgentLogger;
   initialContext?: Partial<AgentContext>;
   capabilities?: Partial<AgentRuntimeCapabilities>;
+  /**
+   * Where to forward sentinel detections so the WebUI sees them. Defaults to
+   * `<stateDir>/defense-events.jsonl` — the same file the L1 engine writes and
+   * the Hermes WebUI tails, so kernel-level detections land on the Events page.
+   */
+  webuiEventsFile?: string;
 }
 
 export interface HermesRuntimeHandle {
@@ -93,6 +101,9 @@ export function createHermesRuntime(opts: HermesRuntimeOptions): HermesRuntimeHa
     ...opts.capabilities,
   };
 
+  const webuiEventsFile =
+    opts.webuiEventsFile ?? path.join(opts.stateDir, "defense-events.jsonl");
+
   const runtime: AgentRuntime = {
     name: "hermes",
     logger,
@@ -115,6 +126,15 @@ export function createHermesRuntime(opts: HermesRuntimeOptions): HermesRuntimeHa
     },
     readConfig: async () => opts.config ?? {},
     getStateDir: () => opts.stateDir,
+    onSentinelEvent: (event, verdict) => {
+      // Forward each detection into the Hermes WebUI's defense-events.jsonl so
+      // kernel-level (eBPF/uprobe/LSM) events show up on the Events page.
+      try {
+        appendWebuiDefenseEvent(webuiEventsFile, event, verdict);
+      } catch (err) {
+        logger.warn(`sentinel webui forward failed: ${String(err)}`);
+      }
+    },
   };
 
   function pushContext(update: Partial<AgentContext>): void {

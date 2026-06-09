@@ -13,6 +13,12 @@ import os from "node:os";
 
 import { type AgentAegisPluginConfig } from "./src/config.js";
 import { AegisDefenseEngine } from "./src/engine.js";
+import { startSentinelRuntime } from "./sentinel/bootstrap.js";
+import {
+  createHermesRuntime,
+  type HermesRuntimeHandle,
+} from "./sentinel/runtime/adapters/hermes.js";
+import type { SentinelHandle } from "./sentinel/index.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,6 +50,10 @@ type CheckBeforeToolParams = {
 export class AegisRpcRuntime {
   private engine!: AegisDefenseEngine;
   private initialized = false;
+  // Sentinel (eBPF/uprobe/LSM kernel-level defense) — started on init when the
+  // Hermes config enables a probe. Same subsystem OpenClaw starts in index.ts.
+  private hermes?: HermesRuntimeHandle;
+  private sentinel?: SentinelHandle;
 
   constructor() {}
 
@@ -104,9 +114,59 @@ export class AegisRpcRuntime {
       ]);
     }
 
+    // Start the sentinel subsystem (eBPF/uprobe/LSM probes + native judge) on a
+    // Hermes runtime — mirrors OpenClaw's startSentinelForOpenClaw. Probes only
+    // attach when the config enables them. FIRE-AND-FORGET on purpose: probe
+    // attach takes seconds and bridge.py enforces a short RPC timeout, so init
+    // must return promptly. Detections forward to <stateDir>/defense-events.jsonl
+    // (the file the Hermes WebUI tails).
+    try {
+      this.hermes = createHermesRuntime({
+        stateDir: expandedStateDir,
+        config: params.config as Record<string, unknown>,
+      });
+      void startSentinelRuntime(this.hermes.runtime, this.engine)
+        .then((handle) => {
+          this.sentinel = handle;
+        })
+        .catch((err) => console.error(`[aegis:rpc] sentinel start failed: ${String(err)}`));
+    } catch (err) {
+      console.error(`[aegis:rpc] sentinel wiring failed; L1 continues: ${String(err)}`);
+    }
+
     this.initialized = true;
     this.engine.logger.info("agent-aegis RPC runtime initialized");
     return { ok: true };
+  }
+
+  /** Update the live agent context (session/run/pids) the probes label events with. */
+  pushContext(params: {
+    sessionKey?: string;
+    runId?: string;
+    toolName?: string;
+    pids?: number[];
+  }): { ok: true } {
+    this.hermes?.pushContext({
+      sessionKey: params.sessionKey,
+      runId: params.runId,
+      toolName: params.toolName,
+      pids: params.pids,
+    });
+    return { ok: true };
+  }
+
+  /** Tear down sentinel + its probes. Called by rpc-server on SIGTERM/SIGINT. */
+  async stop(): Promise<void> {
+    try {
+      await this.sentinel?.stop();
+    } catch (err) {
+      console.error(`[aegis:rpc] sentinel stop threw: ${String(err)}`);
+    }
+    try {
+      await this.hermes?.signalShutdown();
+    } catch (err) {
+      console.error(`[aegis:rpc] hermes shutdown threw: ${String(err)}`);
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -247,6 +307,9 @@ export class AegisRpcRuntime {
           break;
         case "update_state":
           result = this.updateState(params as any);
+          break;
+        case "push_context":
+          result = this.pushContext(params as any);
           break;
         case "get_config":
           result = this.engine.config;

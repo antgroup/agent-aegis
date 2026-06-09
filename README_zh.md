@@ -219,10 +219,12 @@ AgentAegis/
   适合灰度上线 / 数据采集。
 - **enforce（强制）** —— `lsm` 探针在内核内拒绝高危 syscall。
 
-### 启用
+### 启用 —— OpenClaw 与 Hermes
 
-内核探针是**按需开启**的（仅 Linux；需要 root + BCC）。在 `openclaw.plugin.json` 的
-`userConfig` 中添加（或在 WebUI Config 页面切换）：
+内核探针是**按需开启**的（仅 Linux）。**同一套** sentinel 子系统在两种运行时上运行 ——
+OpenClaw 由原生插件启动，Hermes 由 Python 插件拉起的 Node RPC server 启动 —— 配置项完全一致。
+
+**OpenClaw** —— 在 `openclaw.plugin.json` 的 `userConfig` 中添加（或用 WebUI Config 页面），重启 gateway：
 
 ```json
 {
@@ -236,12 +238,26 @@ AgentAegis/
 }
 ```
 
-要启用内核级实拦截，设 `nativeJudge.mode: "enforce"` 且 `probes.lsm.enabled: true`。
-通过 `nativeJudge.sensitivePaths` / `nativeJudge.scratchDirs` 可不改代码扩展覆盖范围。
+**Hermes** —— 编辑 `~/.hermes/plugins/agent-aegis/config.yaml`（安装脚本已写入该段，默认关闭），重启 Hermes：
 
-**前置要求：** 支持 eBPF 的 Linux 内核、root、BCC（`bpfcc-tools`、`python3-bpfcc`）、
-以及已挂载的 `/sys/kernel/debug`。macOS/Windows 上请用下面的 Docker 一键验证（它们通过
-OrbStack / Docker Desktop 跑特权 Linux 容器）。
+```yaml
+nativeJudge:
+  mode: observe
+probes:
+  ebpf:
+    enabled: true
+  lsm:
+    enabled: false
+    minSeverity: high
+```
+
+要启用内核级实拦截，设 `nativeJudge.mode: enforce` **且** `probes.lsm.enabled: true`
+（`ebpf` tracepoint 探针只能观测，`lsm` 才在内核内拦截）。通过
+`nativeJudge.sensitivePaths` / `nativeJudge.scratchDirs` 可不改代码扩展覆盖范围。
+
+**前置要求（两者通用）：** 支持 eBPF 的 Linux 内核、root、BCC（`bpfcc-tools`、`python3-bpfcc`）、
+以及已挂载的 `/sys/kernel/debug`。macOS/Windows 上请用下面的 Docker 一键验证（通过
+OrbStack / Docker Desktop 跑特权 Linux 容器）。探针 fail-open —— 挂不上时只记日志，智能体照常运行。
 
 ### 一键验证（任意 OS，需 Docker）
 
@@ -252,7 +268,8 @@ npm run e2e:uprobe  # 用户态 libc / OpenSSL 符号探针
 
 # 观测模式 + WebUI：检测但不拦截，把检测结果转发到 http://localhost:3800 的
 # WebUI 并自动打开浏览器：
-npm run observe:live
+npm run observe:live      # OpenClaw 式接线（noop runtime + eBPF 探针）
+npm run observe:hermes    # 驱动真实的 Hermes RPC init 路径（rpc-server.js）
 ```
 
 每个 harness 都会构建特权 Linux 容器，触发 `cat /etc/shadow`，并断言 native judge
