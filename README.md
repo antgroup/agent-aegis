@@ -132,6 +132,14 @@ Open `http://localhost:3800`. Alternatively, set `webPort: 3800` in `~/.hermes/p
 
 ---
 
+## ⚠️ Operational notes
+
+- **Config changes require a restart.** Both runtimes read the defense config only at startup. After editing the config file (`config.yaml` for Hermes, `openclaw.plugin.json` for OpenClaw) or changing settings in the WebUI, restart the agent — a running session keeps the old config. (For Hermes, make sure the old `rpc-server.js` child process has exited before restarting.)
+- **`observe` logs, `enforce` blocks.** A defense in `observe` mode records detections but lets the action through; only `enforce` actually blocks. Roll out in `observe`, then promote high-confidence defenses to `enforce`.
+- **Hermes must load plugins to defend.** Use the gateway / interactive chat — `hermes -z` (oneshot) loads no plugins, so no defense runs. On startup the log should report `N high-risk tools wrapped` with N > 0, which is what arms tool-call blocking. Set `approvals.mode: off` to let AgentAegis own blocking.
+
+---
+
 ## ✨ Features
 
 ### Runtime Defense
