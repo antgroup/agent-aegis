@@ -101,15 +101,23 @@ cd AgentAegis
 bash adapters/hermes/install.sh
 ```
 
-**2.** Enable the plugin in `~/.hermes/config.yaml`, and let AgentAegis own blocking (avoids double approval prompts):
+**2.** Enable the plugin — use the CLI (it writes `plugins.enabled` in `~/.hermes/config.yaml`):
+
+```bash
+hermes plugins enable agent-aegis
+hermes plugins list                 # agent-aegis -> enabled
+```
+
+> Equivalent manual edit (instead of the CLI): add `agent-aegis` under `plugins.enabled` in `~/.hermes/config.yaml`.
+
+**(Optional) Let AgentAegis own blocking.** AgentAegis's defenses work regardless of Hermes's own approval mode — the two are independent. But if Hermes `approvals.mode` is `manual`/`smart`, a dangerous operation gets prompted by **both** Hermes and AgentAegis (double prompts), and `manual` can hang in non-interactive runs. To make AgentAegis the single gate, set `approvals.mode: off` in `~/.hermes/config.yaml`:
 
 ```yaml
-plugins:
-  enabled:
-    - agent-aegis
 approvals:
   mode: off
 ```
+
+Keep `manual` if you deliberately want Hermes's human approval as an extra layer.
 
 **3.** Restart Hermes. Review defense settings in `~/.hermes/plugins/agent-aegis/config.yaml`.
 

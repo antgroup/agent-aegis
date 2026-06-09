@@ -43,11 +43,15 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}Starting AgentAegis Web UI for Hermes...${NC}"
 echo ""
 
-# Check if web/api is built
-WEB_API_DIR="$SCRIPT_DIR/web/api"
-if [ ! -f "$WEB_API_DIR/dist/index.js" ]; then
-    echo -e "${YELLOW}Web API not built. Building now...${NC}"
-    cd "$WEB_API_DIR"
+# Check if the web UI is built. Build the FULL workspace (shared -> api ->
+# frontend), not just web/api: web/api/dist imports @agent-aegis-web/shared,
+# whose web/shared/dist/index.js must exist at runtime. Building only web/api
+# leaves shared unbuilt -> ERR_MODULE_NOT_FOUND for @agent-aegis-web/shared.
+WEB_DIR="$SCRIPT_DIR/web"
+WEB_API_DIR="$WEB_DIR/api"
+if [ ! -f "$WEB_DIR/shared/dist/index.js" ] || [ ! -f "$WEB_API_DIR/dist/index.js" ]; then
+    echo -e "${YELLOW}Web UI not built. Building the workspace (shared + api + frontend)...${NC}"
+    cd "$WEB_DIR"
     npm install
     npm run build
     cd "$SCRIPT_DIR"

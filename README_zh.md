@@ -100,15 +100,23 @@ cd AgentAegis
 bash adapters/hermes/install.sh
 ```
 
-**2.** 在 `~/.hermes/config.yaml` 中启用插件，并让 AgentAegis 接管拦截（避免重复审批提示）：
+**2.** 启用插件 —— 用 CLI（它会写入 `~/.hermes/config.yaml` 的 `plugins.enabled`）：
+
+```bash
+hermes plugins enable agent-aegis
+hermes plugins list                 # agent-aegis -> enabled
+```
+
+> 等价的手动改法（不用 CLI）：在 `~/.hermes/config.yaml` 的 `plugins.enabled` 下加一行 `agent-aegis`。
+
+**（可选）让 AgentAegis 独占拦截。** AgentAegis 的防御与 Hermes 自身的审批模式无关、两者独立都生效。但若 Hermes `approvals.mode` 为 `manual`/`smart`，同一个危险操作会被 **Hermes 和 AgentAegis 各拦一次**（重复提示），且 `manual` 在非交互运行下可能卡住等待确认。想让 AgentAegis 做唯一关口，在 `~/.hermes/config.yaml` 设 `approvals.mode: off`：
 
 ```yaml
-plugins:
-  enabled:
-    - agent-aegis
 approvals:
   mode: off
 ```
+
+若你刻意想保留 Hermes 的人工审批作为额外一层，维持 `manual` 即可。
 
 **3.** 重启 Hermes。在 `~/.hermes/plugins/agent-aegis/config.yaml` 中查看并调整防御配置。
 
