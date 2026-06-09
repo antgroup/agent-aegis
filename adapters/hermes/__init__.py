@@ -53,6 +53,42 @@ def _get_run_id() -> str:
     return _current_run_id
 
 
+# Whether the high-risk tool handlers have been wrapped yet. Wrapping can only
+# succeed once Hermes has registered the built-in tools, which may happen AFTER
+# the plugin's register() runs — see _ensure_tools_wrapped.
+_tools_wrapped: bool = False
+
+
+def _ensure_tools_wrapped(engine, where: str = "") -> None:
+    """Wrap high-risk tool handlers, retrying until the tools actually exist.
+
+    Hermes' ``pre_tool_call`` hook is observation-only and cannot block, so all
+    before-tool blocking depends on replacing the tool handlers
+    (``wrap_dangerous_tools``). But built-in tools (terminal/read_file/...) may
+    not be in the registry yet when the plugin's ``register()`` runs, so a single
+    wrap attempt there can wrap 0 tools and blocking then silently never fires.
+
+    We therefore (re)attempt wrapping at register() time AND on every session
+    start / LLM turn until at least one tool is wrapped, then stop. By the first
+    ``pre_llm_call`` the tools are guaranteed present (their schemas are sent to
+    the model), so this reliably catches them. Wrapping is idempotent — already
+    wrapped handlers are skipped via a marker — so repeated calls are safe.
+    """
+    global _tools_wrapped
+    if _tools_wrapped:
+        return
+    try:
+        from .tool_wrappers import wrap_dangerous_tools
+        count = wrap_dangerous_tools(engine, _get_session_key, _get_run_id)
+    except Exception as exc:  # never let wrapping break the agent
+        logger.warning("AgentAegis: tool wrapping attempt failed: %s", exc)
+        return
+    if count > 0:
+        _tools_wrapped = True
+        suffix = f" ({where})" if where else ""
+        logger.info("AgentAegis: %d high-risk tools wrapped%s", count, suffix)
+
+
 # ---------------------------------------------------------------------------
 # Config loading
 # ---------------------------------------------------------------------------
@@ -124,6 +160,8 @@ def _make_session_start_handler(engine):
         session_id = kwargs.get("session_id", "default")
         _current_session_id = session_id
         logger.debug("Session started: %s", session_id)
+        # Built-in tools are loaded by now; wrap them if register() was too early.
+        _ensure_tools_wrapped(engine, where="session start")
     return handler
 
 
@@ -143,6 +181,10 @@ def _make_pre_llm_call_handler(engine):
         global _current_run_id
         session_id = kwargs.get("session_id", _current_session_id)
         _current_run_id = f"{session_id}:{id(kwargs)}"
+
+        # Guaranteed-safe point to wrap tools: the model is about to be called,
+        # so its tool schemas (and thus the tool handlers) already exist.
+        _ensure_tools_wrapped(engine, where="llm turn")
 
         user_message = kwargs.get("user_message", "")
         context_parts: list = []
@@ -223,7 +265,6 @@ def _make_pre_tool_call_handler(engine):
 def register(ctx):
     """Hermes plugin entry point — register hooks and wrap tools."""
     from .bridge import AegisEngine
-    from .tool_wrappers import wrap_dangerous_tools
     from .paths import find_rpc_server
 
     logger.info("AgentAegis: Initializing security plugin...")
@@ -289,9 +330,11 @@ def register(ctx):
     # Note: pre_tool_call is observer-only in Hermes, actual blocking is done via tool wrapping
     ctx.register_hook("pre_tool_call", _make_pre_tool_call_handler(engine))
 
-    # Wrap high-risk tool handlers for blocking capability
-    # This is necessary because Hermes' pre_tool_call hook cannot block
-    wrapped_count = wrap_dangerous_tools(engine, _get_session_key, _get_run_id)
+    # Wrap high-risk tool handlers for blocking capability. Hermes' pre_tool_call
+    # hook cannot block, so blocking relies on wrapping the tool handlers. The
+    # built-in tools may not be registered yet at this point, so _ensure_tools_wrapped
+    # retries on session start / each LLM turn until it succeeds.
+    _ensure_tools_wrapped(engine, where="register")
 
     # Cleanup on exit
     atexit.register(engine.stop)
@@ -307,4 +350,10 @@ def register(ctx):
         except Exception as exc:
             logger.warning(f"AgentAegis: Failed to start Web UI: {exc}")
 
-    logger.info(f"AgentAegis: Security plugin active ({wrapped_count} tools wrapped)")
+    if _tools_wrapped:
+        logger.info("AgentAegis: Security plugin active (tool blocking armed)")
+    else:
+        logger.info(
+            "AgentAegis: Security plugin active (tools not in registry yet; "
+            "blocking will arm on the first session/LLM turn)"
+        )
