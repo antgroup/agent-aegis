@@ -12,6 +12,11 @@ export function createProbeEvent(input) {
         sessionKey: input.sessionKey,
         runId: input.runId,
         toolName: input.toolName,
+        proc: input.proc,
+        container: input.container,
+        net: input.net,
+        parentEventId: input.parentEventId,
+        correlationId: input.correlationId,
         meta: input.meta,
     };
 }

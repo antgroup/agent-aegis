@@ -185,6 +185,10 @@ function judgeProcessTreeAnomaly(event, agentPids) {
     };
 }
 function readPpid(event) {
+    // Prefer the structured proc block (v2); fall back to meta.ppid for older
+    // events / probes that only set the flat field.
+    if (typeof event.proc?.ppid === "number")
+        return event.proc.ppid;
     const fromMeta = event.meta?.ppid;
     return typeof fromMeta === "number" ? fromMeta : undefined;
 }

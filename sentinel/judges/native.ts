@@ -229,6 +229,9 @@ function judgeProcessTreeAnomaly(
 }
 
 function readPpid(event: ProbeEvent): number | undefined {
+  // Prefer the structured proc block (v2); fall back to meta.ppid for older
+  // events / probes that only set the flat field.
+  if (typeof event.proc?.ppid === "number") return event.proc.ppid;
   const fromMeta = event.meta?.ppid;
   return typeof fromMeta === "number" ? fromMeta : undefined;
 }

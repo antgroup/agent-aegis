@@ -168,6 +168,158 @@ def now_ms():
     return int(time.time() * 1000)
 
 
+# --- /proc-based event enrichment (v2/M10) ----------------------------------
+# The BPF event carries pid/ppid/comm + the syscall payload. We enrich it with
+# stable process identity/lineage and container context read from /proc. This is
+# best-effort and fail-open: any read error simply omits the field. Stable data
+# is cached by (pid, starttime) so repeated syscalls from one process are cheap
+# and pid reuse invalidates the cache.
+
+_PROC_CACHE = {}        # pid -> (starttime, proc_dict_or_None, container_dict_or_None)
+_PROC_CACHE_MAX = 4096
+
+
+def _read_bytes(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read()
+    except Exception:  # pylint: disable=broad-except
+        return None
+
+
+def _readlink(path):
+    try:
+        return os.readlink(path)
+    except Exception:  # pylint: disable=broad-except
+        return None
+
+
+def _stat_fields(pid):
+    # /proc/<pid>/stat: "pid (comm) state ppid pgrp session ... starttime(field 22)".
+    # comm can contain spaces/parens, so split after the last ')'.
+    raw = _read_bytes("/proc/%d/stat" % pid)
+    if not raw:
+        return None
+    s = raw.decode("utf-8", "replace")
+    rp = s.rfind(")")
+    if rp == -1:
+        return None
+    rest = s[rp + 2:].split()
+    try:
+        return {
+            "ppid": int(rest[1]),
+            "pgid": int(rest[2]),
+            "sid": int(rest[3]),
+            "startTime": int(rest[19]),
+        }
+    except (IndexError, ValueError):
+        return None
+
+
+def _status_ids(pid):
+    raw = _read_bytes("/proc/%d/status" % pid)
+    if not raw:
+        return {}
+    out = {}
+    for line in raw.decode("utf-8", "replace").splitlines():
+        if line.startswith("Uid:"):
+            parts = line.split()
+            if len(parts) >= 2:
+                out["uid"] = int(parts[1])      # real uid
+        elif line.startswith("Gid:"):
+            parts = line.split()
+            if len(parts) >= 2:
+                out["gid"] = int(parts[1])      # real gid
+    return out
+
+
+def _cgroup(pid):
+    raw = _read_bytes("/proc/%d/cgroup" % pid)
+    if not raw:
+        return None
+    lines = [l for l in raw.decode("utf-8", "replace").splitlines() if l]
+    if not lines:
+        return None
+    last = lines[-1]                            # cgroup v2 is "0::/path"
+    return last.split(":", 2)[-1] if ":" in last else last
+
+
+def _cmdline(pid):
+    raw = _read_bytes("/proc/%d/cmdline" % pid)
+    if not raw:
+        return None
+    parts = [p.decode("utf-8", "replace") for p in raw.split(b"\x00") if p]
+    return parts or None
+
+
+def _ancestors(first_ppid, limit=6):
+    chain = []
+    cur = first_ppid
+    for _ in range(limit):
+        if not cur or cur <= 0:
+            break
+        chain.append(cur)
+        st = _stat_fields(cur)
+        cur = st["ppid"] if st else None
+    return chain or None
+
+
+def _enrich_stable(pid):
+    st = _stat_fields(pid)
+    starttime = st["startTime"] if st else None
+    cached = _PROC_CACHE.get(pid)
+    if cached and cached[0] == starttime:
+        return cached[1], cached[2]
+    proc = {}
+    if st:
+        for k in ("ppid", "pgid", "sid", "startTime"):
+            proc[k] = st[k]
+    proc.update(_status_ids(pid))
+    cwd = _readlink("/proc/%d/cwd" % pid)
+    if cwd:
+        proc["cwd"] = cwd
+    if st and st["ppid"]:
+        anc = _ancestors(st["ppid"])
+        if anc:
+            proc["ancestors"] = anc
+    container = {}
+    cg = _cgroup(pid)
+    if cg:
+        container["cgroup"] = cg
+    proc = proc or None
+    container = container or None
+    if len(_PROC_CACHE) < _PROC_CACHE_MAX:
+        _PROC_CACHE[pid] = (starttime, proc, container)
+    return proc, container
+
+
+def attach_enrichment(obj, pid, with_image):
+    """Attach `proc`/`container` to an event dict. Never raises (fail-open).
+
+    with_image adds exe/cmdline. Skip it for sys_enter_execve, where /proc still
+    reflects the PRE-exec image — the BPF event already carries the exec target
+    (path + argv), so the stale /proc image would be misleading.
+    """
+    try:
+        proc, container = _enrich_stable(pid)
+        if with_image:
+            exe = _readlink("/proc/%d/exe" % pid)
+            cmd = _cmdline(pid)
+            if exe or cmd:
+                proc = dict(proc or {})
+                if exe:
+                    proc["exe"] = exe
+                if cmd:
+                    proc["cmdline"] = cmd
+        if proc:
+            obj["proc"] = proc
+        if container:
+            obj["container"] = container
+    except Exception:  # pylint: disable=broad-except
+        pass            # enrichment is best-effort; never drop the event
+    return obj
+
+
 def make_exec_handler(targets):
     def cb(cpu, data, size):
         if "execve" not in targets:
@@ -179,7 +331,9 @@ def make_exec_handler(targets):
             s = bytes(evt.argv[i]).decode("utf-8", "replace").rstrip("\x00")
             if s:
                 argv.append(s)
-        emit({
+        # execve: skip image enrichment (/proc is still the pre-exec image; the
+        # exec target is in path/argv above).
+        emit(attach_enrichment({
             "kind": "syscall",
             "syscall": "execve",
             "pid": int(evt.pid),
@@ -188,7 +342,7 @@ def make_exec_handler(targets):
             "comm": evt.comm.decode("utf-8", "replace").strip("\x00"),
             "path": evt.filename.decode("utf-8", "replace").strip("\x00"),
             "argv": argv,
-        })
+        }, int(evt.pid), with_image=False))
 
     return cb
 
@@ -198,7 +352,7 @@ def make_file_handler(targets):
         if "openat" not in targets:
             return
         evt = ct.cast(data, ct.POINTER(FileEvtT)).contents
-        emit({
+        emit(attach_enrichment({
             "kind": "syscall",
             "syscall": "openat",
             "pid": int(evt.pid),
@@ -206,7 +360,7 @@ def make_file_handler(targets):
             "ts": now_ms(),
             "comm": evt.comm.decode("utf-8", "replace").strip("\x00"),
             "path": evt.path.decode("utf-8", "replace").strip("\x00"),
-        })
+        }, int(evt.pid), with_image=True))
 
     return cb
 
@@ -216,14 +370,14 @@ def make_net_handler(targets):
         if "connect" not in targets:
             return
         evt = ct.cast(data, ct.POINTER(NetEvtT)).contents
-        emit({
+        emit(attach_enrichment({
             "kind": "syscall",
             "syscall": "connect",
             "pid": int(evt.pid),
             "ppid": int(evt.ppid),
             "ts": now_ms(),
             "comm": evt.comm.decode("utf-8", "replace").strip("\x00"),
-        })
+        }, int(evt.pid), with_image=True))
 
     return cb
 

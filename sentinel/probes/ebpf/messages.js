@@ -52,10 +52,105 @@ function parseSyscall(r) {
         out.addr = r.addr;
     if (typeof r.comm === "string")
         out.comm = r.comm;
+    const proc = narrowProc(r.proc);
+    if (proc)
+        out.proc = proc;
+    const container = narrowContainer(r.container);
+    if (container)
+        out.container = container;
+    const net = narrowNet(r.net);
+    if (net)
+        out.net = net;
     if (r.extra && typeof r.extra === "object" && !Array.isArray(r.extra)) {
         out.extra = r.extra;
     }
     return out;
+}
+// --- defensive field narrowers for the v2 enrichment objects -----------------
+function asNum(v) {
+    return typeof v === "number" && Number.isFinite(v) ? v : undefined;
+}
+function asStr(v) {
+    return typeof v === "string" ? v : undefined;
+}
+function asStrArr(v) {
+    return Array.isArray(v) && v.every((x) => typeof x === "string") ? v : undefined;
+}
+function asNumArr(v) {
+    return Array.isArray(v) && v.every((x) => typeof x === "number") ? v : undefined;
+}
+function asObj(v) {
+    return v && typeof v === "object" && !Array.isArray(v) ? v : undefined;
+}
+function compact(o) {
+    return Object.keys(o).length > 0 ? o : undefined;
+}
+export function narrowProc(v) {
+    const o = asObj(v);
+    if (!o)
+        return undefined;
+    const p = {};
+    if (asNum(o.tid) !== undefined)
+        p.tid = asNum(o.tid);
+    if (asNum(o.ppid) !== undefined)
+        p.ppid = asNum(o.ppid);
+    if (asNum(o.pgid) !== undefined)
+        p.pgid = asNum(o.pgid);
+    if (asNum(o.sid) !== undefined)
+        p.sid = asNum(o.sid);
+    if (asNum(o.uid) !== undefined)
+        p.uid = asNum(o.uid);
+    if (asNum(o.gid) !== undefined)
+        p.gid = asNum(o.gid);
+    if (asStr(o.comm) !== undefined)
+        p.comm = asStr(o.comm);
+    if (asStr(o.exe) !== undefined)
+        p.exe = asStr(o.exe);
+    if (asStr(o.cwd) !== undefined)
+        p.cwd = asStr(o.cwd);
+    if (asStrArr(o.cmdline) !== undefined)
+        p.cmdline = asStrArr(o.cmdline);
+    if (asNum(o.startTime) !== undefined)
+        p.startTime = asNum(o.startTime);
+    if (asNumArr(o.ancestors) !== undefined)
+        p.ancestors = asNumArr(o.ancestors);
+    return compact(p);
+}
+export function narrowContainer(v) {
+    const o = asObj(v);
+    if (!o)
+        return undefined;
+    const c = {};
+    if (asStr(o.cgroup) !== undefined)
+        c.cgroup = asStr(o.cgroup);
+    if (asNum(o.cgroupId) !== undefined)
+        c.cgroupId = asNum(o.cgroupId);
+    if (asNum(o.pidNs) !== undefined)
+        c.pidNs = asNum(o.pidNs);
+    if (asNum(o.netNs) !== undefined)
+        c.netNs = asNum(o.netNs);
+    if (asNum(o.mntNs) !== undefined)
+        c.mntNs = asNum(o.mntNs);
+    return compact(c);
+}
+export function narrowNet(v) {
+    const o = asObj(v);
+    if (!o)
+        return undefined;
+    const n = {};
+    if (asStr(o.family) !== undefined)
+        n.family = asStr(o.family);
+    if (asStr(o.proto) !== undefined)
+        n.proto = asStr(o.proto);
+    if (asStr(o.daddr) !== undefined)
+        n.daddr = asStr(o.daddr);
+    if (asNum(o.dport) !== undefined)
+        n.dport = asNum(o.dport);
+    if (asStr(o.saddr) !== undefined)
+        n.saddr = asStr(o.saddr);
+    if (asNum(o.sport) !== undefined)
+        n.sport = asNum(o.sport);
+    return compact(n);
 }
 function parseLog(r) {
     const level = r.level;

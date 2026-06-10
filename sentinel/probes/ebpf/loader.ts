@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createProbeEvent } from "../../channel/event.js";
+import { createProbeEvent, type ProcessInfo } from "../../channel/event.js";
 import type { ProbeEventSource } from "../../channel/schema.js";
 import type { Probe, ProbeDeps } from "../types.js";
 import { type EbpfMessage, parseEbpfMessage } from "./messages.js";
@@ -151,21 +151,43 @@ function routeMessage(msg: EbpfMessage, deps: ProbeDeps): void {
       log[msg.level](`[ebpf.runner] ${msg.message}`);
       return;
     case "syscall": {
+      const ctx = deps.runtime.getCurrentContext();
       const event = createProbeEvent({
         source: EVENT_SOURCE,
         syscall: msg.syscall,
         pid: msg.pid,
         timestamp: msg.ts,
         args: buildArgs(msg),
-        sessionKey: deps.runtime.getCurrentContext().sessionKey,
-        runId: deps.runtime.getCurrentContext().runId,
-        toolName: deps.runtime.getCurrentContext().toolName,
+        sessionKey: ctx.sessionKey,
+        runId: ctx.runId,
+        toolName: ctx.toolName,
+        proc: buildProc(msg),
+        container: msg.container,
+        net: msg.net,
+        // Back-compat: the native judge's process-tree check reads meta.ppid.
         meta: msg.ppid !== undefined ? { ppid: msg.ppid, comm: msg.comm } : { comm: msg.comm },
       });
       void deps.publish(event);
       return;
     }
   }
+}
+
+/**
+ * Build structured process info, merging the flat `ppid`/`comm` (always present
+ * from the BPF event) with the richer `proc` block (best-effort /proc
+ * enrichment). The flat fields fill any gap so `proc.ppid`/`proc.comm` are
+ * populated even when the runner sent no `proc` object.
+ */
+function buildProc(msg: {
+  ppid?: number;
+  comm?: string;
+  proc?: ProcessInfo;
+}): ProcessInfo | undefined {
+  const proc: ProcessInfo = { ...(msg.proc ?? {}) };
+  if (proc.ppid === undefined && msg.ppid !== undefined) proc.ppid = msg.ppid;
+  if (proc.comm === undefined && msg.comm !== undefined) proc.comm = msg.comm;
+  return Object.keys(proc).length > 0 ? proc : undefined;
 }
 
 function buildArgs(msg: {

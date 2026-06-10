@@ -114,6 +114,40 @@ describe("createEbpfProbe — runtime path", () => {
     expect(ev.syscall).toBe("execve");
     expect(ev.pid).toBe(1234);
     expect((ev.meta as Record<string, unknown>).ppid).toBe(1);
+    // v2: flat ppid/comm are mirrored into structured proc.
+    expect((ev.proc as Record<string, unknown>).ppid).toBe(1);
+    await probe.stop();
+  });
+
+  it("maps v2 proc/container/net enrichment onto the event", async () => {
+    const fake = makeFakeChild();
+    const probe = createEbpfProbe({
+      platformOverride: { supported: true, platform: "linux" },
+      spawnOverride: () => fake,
+    });
+    const { deps, published } = makeDeps();
+    await probe.start(deps);
+    fake.emitStdout(
+      JSON.stringify({
+        kind: "syscall",
+        syscall: "connect",
+        pid: 4242,
+        ppid: 7,
+        ts: 1,
+        comm: "curl",
+        proc: { uid: 1000, exe: "/usr/bin/curl", ancestors: [7, 1] },
+        container: { cgroup: "/agent.service" },
+        net: { proto: "tcp", daddr: "1.2.3.4", dport: 443 },
+      }) + "\n",
+    );
+    await new Promise((r) => setImmediate(r));
+    expect(published).toHaveLength(1);
+    const ev = published[0] as Record<string, unknown>;
+    const proc = ev.proc as Record<string, unknown>;
+    // merged: flat ppid/comm + the richer proc block
+    expect(proc).toMatchObject({ ppid: 7, comm: "curl", uid: 1000, exe: "/usr/bin/curl", ancestors: [7, 1] });
+    expect(ev.container).toEqual({ cgroup: "/agent.service" });
+    expect(ev.net).toEqual({ proto: "tcp", daddr: "1.2.3.4", dport: 443 });
     await probe.stop();
   });
 
