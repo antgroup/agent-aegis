@@ -12,12 +12,9 @@ Wire protocol is identical to the eBPF runner: one JSON object per stdout
 line. The TS loader (../loader.ts) treats both runners interchangeably.
 
 This script is invoked as a child process by Node, never imported.
-
-Kept compatible with the distro system python3: RHEL/CentOS/Anolis/Alinux 7
-ship python 3.6, which is also where the `python3-bcc` package installs — so
-BCC is only importable by that 3.6 interpreter. Therefore NO `from __future__
-import annotations` and no 3.7+ syntax here.
 """
+
+from __future__ import annotations
 
 import argparse
 import ctypes as ct
