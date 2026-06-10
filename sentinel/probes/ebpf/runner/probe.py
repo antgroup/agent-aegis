@@ -9,9 +9,13 @@ loader.ts`) reads stdout line-by-line.
 This script is intentionally simple and Linux-only — it is invoked as a
 child process by the Node loader, never imported. Stderr is reserved for
 fatal diagnostics; stdout is the wire protocol.
-"""
 
-from __future__ import annotations
+Kept compatible with the distro system python3: RHEL/CentOS/Anolis/Alinux 7
+ship python 3.6, which is also where the `python3-bcc` package installs — so
+BCC is only importable by that 3.6 interpreter. Therefore NO `from __future__
+import annotations` and no 3.7+ syntax here. The script carries no type
+annotations that would need it.
+"""
 
 import argparse
 import ctypes as ct
