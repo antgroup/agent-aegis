@@ -20,7 +20,16 @@
     "rpc-handlers.js",
     "rpc-server.ts",
     "rpc-server.js",
-    "sentinel/"
+    "sentinel/index.ts",
+    "sentinel/index.js",
+    "sentinel/bootstrap.ts",
+    "sentinel/bootstrap.js",
+    "sentinel/README.md",
+    "sentinel/channel/",
+    "sentinel/judges/",
+    "sentinel/runtime/",
+    "sentinel/probes/types.ts",
+    "sentinel/probes/types.js"
   ],
   "openclaw": {
     "extensions": [

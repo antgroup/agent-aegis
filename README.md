@@ -59,6 +59,12 @@ npm install && npm run build
 openclaw plugins install ./AgentAegis
 ```
 
+> ℹ️ The kernel probes (`sentinel/probes/{ebpf,uprobe,lsm}`) are **not** part of this
+> package — they spawn helper processes via `node:child_process`, which OpenClaw's
+> plugin scanner blocks. The L1 tool-call defenses install and run normally; to
+> exercise the eBPF/kernel layer on OpenClaw, run the probes **standalone** (see
+> *Kernel-Level Defense → Standalone eBPF launch* below).
+
 **3.** Trust it and restart the gateway so it loads. Add `agent-aegis` to `plugins.allow` in `~/.openclaw/openclaw.json`, then verify:
 
 ```bash
@@ -237,26 +243,14 @@ verdict is persisted as JSONL and forwarded to the **WebUI Events page**.
   intercept (the operation runs). Safe for rollout / data collection.
 - **enforce** — the `lsm` probe denies high-severity syscalls in-kernel.
 
-### Enable — OpenClaw and Hermes
+### Enable
 
-Kernel probes are **opt-in** (Linux only). The **same** sentinel subsystem runs
-on both runtimes — OpenClaw starts it from the native plugin, Hermes from the
-Node RPC server the Python plugin spawns — so the config keys are identical.
-
-**OpenClaw** — edit `openclaw.plugin.json` `userConfig` (or the WebUI Config page),
-then restart the gateway:
-
-```json
-{
-  "userConfig": {
-    "nativeJudge": { "mode": "observe" },
-    "probes": {
-      "ebpf": { "enabled": true },
-      "lsm":  { "enabled": false, "minSeverity": "high" }
-    }
-  }
-}
-```
+Kernel probes are **opt-in** (Linux only) and spawn their runners via
+`node:child_process`. OpenClaw's plugin scanner blocks `child_process`, so the
+probes are **excluded from the OpenClaw plugin package** — the L1 defenses install
+and run as normal, and you exercise the kernel layer by running the probes
+**standalone** (next subsection). Hermes ships the probes in-bundle and enables them
+from `config.yaml`.
 
 **Hermes** — edit `~/.hermes/plugins/agent-aegis/config.yaml` (the installer ships
 this block, disabled), then restart Hermes:
@@ -277,10 +271,28 @@ For active in-kernel blocking set `nativeJudge.mode: enforce` **and**
 is what blocks in-kernel). Extend coverage without code via
 `nativeJudge.sensitivePaths` / `nativeJudge.scratchDirs`.
 
-**Requirements (both):** a Linux kernel with eBPF, root, BCC (`bpfcc-tools`,
+**Requirements:** a Linux kernel with eBPF, root, BCC (`bpfcc-tools`,
 `python3-bpfcc`), and `/sys/kernel/debug` mounted. On macOS/Windows use the
 Docker harnesses below (privileged Linux container via OrbStack / Docker Desktop).
 Probes fail-open — if they can't attach, it's logged and the agent keeps running.
+
+### Standalone eBPF launch (any runtime, incl. OpenClaw)
+
+The probes are decoupled from the plugin — run them straight from the cloned repo,
+no agent required. Three levels, simplest first:
+
+```bash
+# L0 — raw probe (Linux + root + BCC): syscalls as JSONL on stdout
+sudo python3 sentinel/probes/ebpf/runner/probe.py --targets execve,openat,connect
+#   then, in another shell: cat /etc/shadow ; ls /etc
+#   → {"kind":"ready",...} then {"kind":"syscall","syscall":"openat","path":"/etc/shadow",...}
+
+# L1 — full pipeline (probe → native judge → verdict), no Docker (Linux + root)
+npm run build && sudo node sentinel/probes/ebpf/verify-e2e.mjs   # PASS = cat /etc/shadow → BLOCK
+```
+
+For a containerized run that works on any OS (macOS/Windows via OrbStack / Docker
+Desktop), use the one-command harnesses in **Verify** below.
 
 ### Verify (one command, any OS with Docker)
 

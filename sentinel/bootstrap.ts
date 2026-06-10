@@ -2,13 +2,18 @@ import {
   startSentinel,
   type SentinelHandle,
   type SentinelOptions,
+  type Probe,
 } from "./index.js";
 import { createL1BridgeJudge } from "./judges/l1-bridge.js";
 import { createNativeJudge } from "./judges/native.js";
-import { createEbpfProbe } from "./probes/ebpf/index.js";
-import { createUprobeProbe, type UprobeHookTarget } from "./probes/uprobe/index.js";
-import { createLsmProbe, type LsmMinSeverity } from "./probes/lsm/index.js";
 import type { AgentLogger, AgentRuntime } from "./runtime/types.js";
+
+// Probe option types, inlined so this module never references the probe dirs.
+// The kernel probes spawn helper processes — a pattern the OpenClaw plugin
+// scanner blocks — so they are excluded from the OpenClaw npm pack (see
+// package.json `files`). They are loaded lazily below and may be absent.
+type UprobeHookTarget = "execve" | "openat" | "connect" | "SSL_write" | "SSL_read";
+type LsmMinSeverity = "high" | "critical";
 
 /**
  * Framework-agnostic sentinel bootstrap.
@@ -22,6 +27,32 @@ import type { AgentLogger, AgentRuntime } from "./runtime/types.js";
 
 /** The L1 defense engine, referenced structurally to keep the dep rule. */
 export type SentinelEngine = Parameters<typeof createL1BridgeJudge>[0];
+
+/** A probe factory (e.g. `createEbpfProbe`) loaded dynamically at runtime. */
+type ProbeFactory = (opts: Record<string, unknown>) => Probe;
+
+/**
+ * Dynamically import a probe factory by module specifier. The kernel probes
+ * are excluded from the OpenClaw plugin package, so the module may not exist —
+ * in that case log at info and return null so sentinel keeps running. Hermes
+ * ships the probe dirs, so there the import resolves and probes work as before.
+ */
+async function loadProbeFactory(
+  specifier: string,
+  exportName: string,
+  logger: AgentLogger,
+): Promise<ProbeFactory | null> {
+  try {
+    const mod = (await import(specifier)) as Record<string, unknown>;
+    const factory = mod[exportName];
+    return typeof factory === "function" ? (factory as ProbeFactory) : null;
+  } catch (err) {
+    logger.info(
+      `[agent-aegis] ${exportName} unavailable (kernel probes not bundled here — run standalone): ${String(err)}`,
+    );
+    return null;
+  }
+}
 
 /**
  * Start sentinel against an already-constructed runtime: register the
@@ -58,39 +89,60 @@ export async function startSentinelRuntime(
     warnIfLegacyFrida(config, runtime.logger);
     const ebpfCfg = readEbpfConfig(config);
     if (ebpfCfg.enabled) {
-      await sentinel.registerProbe(
-        createEbpfProbe({
-          pythonBin: ebpfCfg.pythonBin,
-          runnerScript: ebpfCfg.runnerScript,
-          runnerBin: ebpfCfg.runnerBin,
-        }),
+      const createEbpfProbe = await loadProbeFactory(
+        "./probes/ebpf/index.js",
+        "createEbpfProbe",
+        runtime.logger,
       );
+      if (createEbpfProbe) {
+        await sentinel.registerProbe(
+          createEbpfProbe({
+            pythonBin: ebpfCfg.pythonBin,
+            runnerScript: ebpfCfg.runnerScript,
+            runnerBin: ebpfCfg.runnerBin,
+          }),
+        );
+      }
     }
     const uprobeCfg = readUprobeConfig(config);
     if (uprobeCfg.enabled) {
-      await sentinel.registerProbe(
-        createUprobeProbe({
-          pythonBin: uprobeCfg.pythonBin,
-          runnerScript: uprobeCfg.runnerScript,
-          runnerBin: uprobeCfg.runnerBin,
-          targets: uprobeCfg.targets,
-          libcPath: uprobeCfg.libcPath,
-          opensslPath: uprobeCfg.opensslPath,
-        }),
+      const createUprobeProbe = await loadProbeFactory(
+        "./probes/uprobe/index.js",
+        "createUprobeProbe",
+        runtime.logger,
       );
+      if (createUprobeProbe) {
+        await sentinel.registerProbe(
+          createUprobeProbe({
+            pythonBin: uprobeCfg.pythonBin,
+            runnerScript: uprobeCfg.runnerScript,
+            runnerBin: uprobeCfg.runnerBin,
+            targets: uprobeCfg.targets,
+            libcPath: uprobeCfg.libcPath,
+            opensslPath: uprobeCfg.opensslPath,
+          }),
+        );
+      }
     }
     const lsmCfg = readLsmConfig(config);
     if (lsmCfg.enabled) {
-      await sentinel.registerProbe(
-        createLsmProbe({
-          runnerBin: lsmCfg.runnerBin,
-          policyTtlSeconds: lsmCfg.policyTtlSeconds,
-          maxEntries: lsmCfg.maxEntries,
-          minSeverity: lsmCfg.minSeverity,
-          socketPath: lsmCfg.socketPath,
-          stateDir: runtime.getStateDir(),
-        }),
+      const createLsmProbe = await loadProbeFactory(
+        "./probes/lsm/index.js",
+        "createLsmProbe",
+        runtime.logger,
       );
+      if (createLsmProbe) {
+        await sentinel.registerProbe(
+          createLsmProbe({
+            runnerBin: lsmCfg.runnerBin,
+            policyTtlSeconds: lsmCfg.policyTtlSeconds,
+            maxEntries: lsmCfg.maxEntries,
+            minSeverity: lsmCfg.minSeverity,
+            socketPath: lsmCfg.socketPath,
+            stateDir: runtime.getStateDir(),
+          }),
+        );
+      }
     }
   } catch (err) {
     runtime.logger.warn(

@@ -58,6 +58,11 @@ npm install && npm run build
 openclaw plugins install ./AgentAegis
 ```
 
+> ℹ️ 内核探针（`sentinel/probes/{ebpf,uprobe,lsm}`）**不在**此安装包内 —— 它们通过
+> `node:child_process` 拉起辅助进程，而 OpenClaw 的插件扫描器会拦截 `child_process`。
+> L1 工具调用层防御照常安装运行；要在 OpenClaw 上验证 eBPF/内核层，请**单独启动**探针
+> （见下文 *内核级防御 → 独立启动 eBPF 探针*）。
+
 **3.** 信任该插件并重启 gateway 使其加载。在 `~/.openclaw/openclaw.json` 的 `plugins.allow` 中加入 `agent-aegis`，然后验证：
 
 ```bash
@@ -235,24 +240,12 @@ AgentAegis/
   适合灰度上线 / 数据采集。
 - **enforce（强制）** —— `lsm` 探针在内核内拒绝高危 syscall。
 
-### 启用 —— OpenClaw 与 Hermes
+### 启用
 
-内核探针是**按需开启**的（仅 Linux）。**同一套** sentinel 子系统在两种运行时上运行 ——
-OpenClaw 由原生插件启动，Hermes 由 Python 插件拉起的 Node RPC server 启动 —— 配置项完全一致。
-
-**OpenClaw** —— 在 `openclaw.plugin.json` 的 `userConfig` 中添加（或用 WebUI Config 页面），重启 gateway：
-
-```json
-{
-  "userConfig": {
-    "nativeJudge": { "mode": "observe" },
-    "probes": {
-      "ebpf": { "enabled": true },
-      "lsm":  { "enabled": false, "minSeverity": "high" }
-    }
-  }
-}
-```
+内核探针是**按需开启**的（仅 Linux），并通过 `node:child_process` 拉起各自的 runner。
+OpenClaw 的插件扫描器会拦截 `child_process`，因此这些探针**已从 OpenClaw 插件包中排除** ——
+L1 防御照常安装运行，内核层则通过**单独启动**探针来验证（见下一小节）。Hermes 仍随插件分发
+探针，并在 `config.yaml` 中启用。
 
 **Hermes** —— 编辑 `~/.hermes/plugins/agent-aegis/config.yaml`（安装脚本已写入该段，默认关闭），重启 Hermes：
 
@@ -271,9 +264,26 @@ probes:
 （`ebpf` tracepoint 探针只能观测，`lsm` 才在内核内拦截）。通过
 `nativeJudge.sensitivePaths` / `nativeJudge.scratchDirs` 可不改代码扩展覆盖范围。
 
-**前置要求（两者通用）：** 支持 eBPF 的 Linux 内核、root、BCC（`bpfcc-tools`、`python3-bpfcc`）、
+**前置要求：** 支持 eBPF 的 Linux 内核、root、BCC（`bpfcc-tools`、`python3-bpfcc`）、
 以及已挂载的 `/sys/kernel/debug`。macOS/Windows 上请用下面的 Docker 一键验证（通过
 OrbStack / Docker Desktop 跑特权 Linux 容器）。探针 fail-open —— 挂不上时只记日志，智能体照常运行。
+
+### 独立启动 eBPF 探针（任意运行时，含 OpenClaw）
+
+探针已与插件解耦 —— 直接在克隆好的仓库里运行即可，无需任何智能体。三个层级，由简到全：
+
+```bash
+# L0 —— 裸探针（Linux + root + BCC）：syscall 以 JSONL 打到 stdout
+sudo python3 sentinel/probes/ebpf/runner/probe.py --targets execve,openat,connect
+#   然后在另一个 shell 触发：cat /etc/shadow ; ls /etc
+#   → {"kind":"ready",...} 然后 {"kind":"syscall","syscall":"openat","path":"/etc/shadow",...}
+
+# L1 —— 全链路（探针 → native judge → 判定），不用 Docker（Linux + root）
+npm run build && sudo node sentinel/probes/ebpf/verify-e2e.mjs   # PASS = cat /etc/shadow → BLOCK
+```
+
+要跑能在任意 OS（macOS/Windows 经 OrbStack / Docker Desktop）工作的容器化验证，
+用下文 **一键验证** 里的命令。
 
 ### 一键验证（任意 OS，需 Docker）
 

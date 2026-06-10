@@ -1,9 +1,23 @@
 import { startSentinel, } from "./index.js";
 import { createL1BridgeJudge } from "./judges/l1-bridge.js";
 import { createNativeJudge } from "./judges/native.js";
-import { createEbpfProbe } from "./probes/ebpf/index.js";
-import { createUprobeProbe } from "./probes/uprobe/index.js";
-import { createLsmProbe } from "./probes/lsm/index.js";
+/**
+ * Dynamically import a probe factory by module specifier. The kernel probes
+ * are excluded from the OpenClaw plugin package, so the module may not exist —
+ * in that case log at info and return null so sentinel keeps running. Hermes
+ * ships the probe dirs, so there the import resolves and probes work as before.
+ */
+async function loadProbeFactory(specifier, exportName, logger) {
+    try {
+        const mod = (await import(specifier));
+        const factory = mod[exportName];
+        return typeof factory === "function" ? factory : null;
+    }
+    catch (err) {
+        logger.info(`[agent-aegis] ${exportName} unavailable (kernel probes not bundled here — run standalone): ${String(err)}`);
+        return null;
+    }
+}
 /**
  * Start sentinel against an already-constructed runtime: register the
  * `l1-bridge` + `native` judges, then attach whichever probes
@@ -30,33 +44,42 @@ export async function startSentinelRuntime(runtime, engine, opts) {
         warnIfLegacyFrida(config, runtime.logger);
         const ebpfCfg = readEbpfConfig(config);
         if (ebpfCfg.enabled) {
-            await sentinel.registerProbe(createEbpfProbe({
-                pythonBin: ebpfCfg.pythonBin,
-                runnerScript: ebpfCfg.runnerScript,
-                runnerBin: ebpfCfg.runnerBin,
-            }));
+            const createEbpfProbe = await loadProbeFactory("./probes/ebpf/index.js", "createEbpfProbe", runtime.logger);
+            if (createEbpfProbe) {
+                await sentinel.registerProbe(createEbpfProbe({
+                    pythonBin: ebpfCfg.pythonBin,
+                    runnerScript: ebpfCfg.runnerScript,
+                    runnerBin: ebpfCfg.runnerBin,
+                }));
+            }
         }
         const uprobeCfg = readUprobeConfig(config);
         if (uprobeCfg.enabled) {
-            await sentinel.registerProbe(createUprobeProbe({
-                pythonBin: uprobeCfg.pythonBin,
-                runnerScript: uprobeCfg.runnerScript,
-                runnerBin: uprobeCfg.runnerBin,
-                targets: uprobeCfg.targets,
-                libcPath: uprobeCfg.libcPath,
-                opensslPath: uprobeCfg.opensslPath,
-            }));
+            const createUprobeProbe = await loadProbeFactory("./probes/uprobe/index.js", "createUprobeProbe", runtime.logger);
+            if (createUprobeProbe) {
+                await sentinel.registerProbe(createUprobeProbe({
+                    pythonBin: uprobeCfg.pythonBin,
+                    runnerScript: uprobeCfg.runnerScript,
+                    runnerBin: uprobeCfg.runnerBin,
+                    targets: uprobeCfg.targets,
+                    libcPath: uprobeCfg.libcPath,
+                    opensslPath: uprobeCfg.opensslPath,
+                }));
+            }
         }
         const lsmCfg = readLsmConfig(config);
         if (lsmCfg.enabled) {
-            await sentinel.registerProbe(createLsmProbe({
-                runnerBin: lsmCfg.runnerBin,
-                policyTtlSeconds: lsmCfg.policyTtlSeconds,
-                maxEntries: lsmCfg.maxEntries,
-                minSeverity: lsmCfg.minSeverity,
-                socketPath: lsmCfg.socketPath,
-                stateDir: runtime.getStateDir(),
-            }));
+            const createLsmProbe = await loadProbeFactory("./probes/lsm/index.js", "createLsmProbe", runtime.logger);
+            if (createLsmProbe) {
+                await sentinel.registerProbe(createLsmProbe({
+                    runnerBin: lsmCfg.runnerBin,
+                    policyTtlSeconds: lsmCfg.policyTtlSeconds,
+                    maxEntries: lsmCfg.maxEntries,
+                    minSeverity: lsmCfg.minSeverity,
+                    socketPath: lsmCfg.socketPath,
+                    stateDir: runtime.getStateDir(),
+                }));
+            }
         }
     }
     catch (err) {
