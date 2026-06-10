@@ -1,5 +1,7 @@
 import { ProbeEventBus } from "./channel/bus.js";
+import { EVENT_SCHEMA_VERSION } from "./channel/schema.js";
 import { ProbeEventStore } from "./channel/store.js";
+import { SqliteEventIndex } from "./channel/event-index.js";
 import { aggregate, runJudges } from "./judges/aggregator.js";
 import { JudgeRegistry } from "./judges/base.js";
 /**
@@ -12,13 +14,18 @@ export function startSentinel(runtime, opts = {}) {
     const strategy = opts.aggregatorStrategy ?? "strictest";
     const logger = runtime.logger;
     const store = new ProbeEventStore({ stateDir: runtime.getStateDir() });
+    const index = new SqliteEventIndex({ stateDir: runtime.getStateDir() });
+    if (!index.available) {
+        logger.warn(`[sentinel] queryable event index disabled (${index.unavailableReason ?? "node:sqlite unavailable"}); JSONL log unaffected`);
+    }
     const bus = new ProbeEventBus({
         onError: (err, event) => logger.error(`[sentinel] subscriber threw for event ${event.id}: ${String(err)}`),
     });
     const registry = new JudgeRegistry();
     const probes = [];
     const verdictSubscribers = new Set();
-    // Persistence subscriber: every published event lands in JSONL.
+    // Persistence subscriber: every published event lands in JSONL (durable log)
+    // and the SQLite index (queryable projection). Each is independently guarded.
     bus.subscribe((event) => {
         try {
             store.appendEvent(event);
@@ -26,13 +33,19 @@ export function startSentinel(runtime, opts = {}) {
         catch (err) {
             logger.error(`[sentinel] failed to persist event ${event.id}: ${String(err)}`);
         }
+        try {
+            index.appendEvent(event);
+        }
+        catch (err) {
+            logger.error(`[sentinel] failed to index event ${event.id}: ${String(err)}`);
+        }
     });
     // Tool-call interceptor: wraps the runtime's tool-call attempt as a
     // synthetic ProbeEvent (source = "l1-hook") so that the same judge
     // pipeline applies to high-level intercepts and low-level probes.
     runtime.registerToolCallInterceptor(async (attempt) => {
         const event = {
-            schema: 1,
+            schema: EVENT_SCHEMA_VERSION,
             id: cryptoRandom(),
             timestamp: Date.now(),
             source: "l1-hook",
@@ -66,6 +79,12 @@ export function startSentinel(runtime, opts = {}) {
         }
         catch (err) {
             logger.error(`[sentinel] failed to persist verdict for ${event.id}: ${String(err)}`);
+        }
+        try {
+            index.appendVerdict(event.id, aggregated);
+        }
+        catch (err) {
+            logger.error(`[sentinel] failed to index verdict for ${event.id}: ${String(err)}`);
         }
         runtime.onSentinelEvent?.(event, aggregated);
         for (const cb of verdictSubscribers) {
@@ -113,6 +132,7 @@ export function startSentinel(runtime, opts = {}) {
             bus.publish(event);
             return processEvent(event);
         },
+        queryEvents: (query) => index.query(query),
         stop: async () => {
             if (stopped)
                 return;
@@ -128,6 +148,7 @@ export function startSentinel(runtime, opts = {}) {
             probes.length = 0;
             bus.clear();
             await store.close();
+            index.close();
         },
         status: () => ({ judges: registry.size(), probes: probes.length }),
     };

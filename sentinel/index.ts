@@ -4,8 +4,9 @@ import {
   type ProbeEvent,
   type Verdict,
 } from "./channel/event.js";
-import type { AggregatorStrategy } from "./channel/schema.js";
+import { EVENT_SCHEMA_VERSION, type AggregatorStrategy } from "./channel/schema.js";
 import { ProbeEventStore } from "./channel/store.js";
+import { SqliteEventIndex, type EventQuery, type EventRow } from "./channel/event-index.js";
 import { aggregate, runJudges } from "./judges/aggregator.js";
 import { type Judge, JudgeRegistry } from "./judges/base.js";
 import type { Probe, ProbeDeps } from "./probes/types.js";
@@ -37,6 +38,11 @@ export interface SentinelHandle {
    * should treat null as "allow").
    */
   publish(event: ProbeEvent): Promise<AggregatedVerdict | null>;
+  /**
+   * Query the SQLite event index (newest-first). Returns [] when the index is
+   * unavailable (e.g. Node < 22.5) — the JSONL log still has the full record.
+   */
+  queryEvents(query?: EventQuery): EventRow[];
   stop(): Promise<void>;
   /** Diagnostic snapshot — count of probes / judges currently attached. */
   status(): { judges: number; probes: number };
@@ -56,6 +62,12 @@ export function startSentinel(
   const logger = runtime.logger;
 
   const store = new ProbeEventStore({ stateDir: runtime.getStateDir() });
+  const index = new SqliteEventIndex({ stateDir: runtime.getStateDir() });
+  if (!index.available) {
+    logger.warn(
+      `[sentinel] queryable event index disabled (${index.unavailableReason ?? "node:sqlite unavailable"}); JSONL log unaffected`,
+    );
+  }
   const bus = new ProbeEventBus({
     onError: (err, event) =>
       logger.error(
@@ -66,12 +78,18 @@ export function startSentinel(
   const probes: Probe[] = [];
   const verdictSubscribers = new Set<(v: AggregatedVerdict) => void>();
 
-  // Persistence subscriber: every published event lands in JSONL.
+  // Persistence subscriber: every published event lands in JSONL (durable log)
+  // and the SQLite index (queryable projection). Each is independently guarded.
   bus.subscribe((event) => {
     try {
       store.appendEvent(event);
     } catch (err) {
       logger.error(`[sentinel] failed to persist event ${event.id}: ${String(err)}`);
+    }
+    try {
+      index.appendEvent(event);
+    } catch (err) {
+      logger.error(`[sentinel] failed to index event ${event.id}: ${String(err)}`);
     }
   });
 
@@ -80,7 +98,7 @@ export function startSentinel(
   // pipeline applies to high-level intercepts and low-level probes.
   runtime.registerToolCallInterceptor(async (attempt) => {
     const event: ProbeEvent = {
-      schema: 1,
+      schema: EVENT_SCHEMA_VERSION,
       id: cryptoRandom(),
       timestamp: Date.now(),
       source: "l1-hook",
@@ -115,6 +133,11 @@ export function startSentinel(
       store.appendVerdict(event.id, aggregated);
     } catch (err) {
       logger.error(`[sentinel] failed to persist verdict for ${event.id}: ${String(err)}`);
+    }
+    try {
+      index.appendVerdict(event.id, aggregated);
+    } catch (err) {
+      logger.error(`[sentinel] failed to index verdict for ${event.id}: ${String(err)}`);
     }
     runtime.onSentinelEvent?.(event, aggregated);
     for (const cb of verdictSubscribers) {
@@ -164,6 +187,7 @@ export function startSentinel(
       bus.publish(event);
       return processEvent(event);
     },
+    queryEvents: (query) => index.query(query),
     stop: async () => {
       if (stopped) return;
       stopped = true;
@@ -177,6 +201,7 @@ export function startSentinel(
       probes.length = 0;
       bus.clear();
       await store.close();
+      index.close();
     },
     status: () => ({ judges: registry.size(), probes: probes.length }),
   };
