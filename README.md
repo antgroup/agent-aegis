@@ -205,7 +205,6 @@ AgentAegis/
 │   ├── api/                    # Express backend (routes: config / status / events / skills)
 │   └── frontend/               # React + Vite + TailwindCSS frontend (Dashboard, Config, Events, Skills)
 │
-├── sentinel/                   # (Experimental) kernel-level eBPF/LSM probe runner
 └── docs/                       # WebUI screenshots
 ```
 
