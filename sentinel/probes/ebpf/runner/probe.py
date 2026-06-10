@@ -62,7 +62,14 @@ except ImportError:
         json.dumps({
             "kind": "log",
             "level": "error",
-            "message": "bcc python module not installed; eBPF probe cannot start",
+            "message": (
+                f"bcc python module not importable by this interpreter ({sys.executable}); "
+                "eBPF probe cannot start. Install BCC for the SYSTEM python3 — "
+                "Debian/Ubuntu: `apt install -y bpfcc-tools python3-bpfcc`; "
+                "RHEL/CentOS/Anolis/Alinux: `yum install -y bcc-tools python3-bcc`. "
+                "Then run with THAT interpreter (a pyenv/conda/venv python will not see "
+                "the distro-installed bcc)."
+            ),
         }),
         flush=True,
     )
