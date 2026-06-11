@@ -1,33 +1,48 @@
 {
-  "name": "@openclaw/agent-aegis",
+  "name": "@antgroup/agent-aegis",
   "version": "2026.3.14",
-  "private": true,
-  "description": "OpenClaw safety guard plugin for prompt, tool, and tool-result hardening.",
+  "private": false,
+  "description": "OpenClaw runtime safety guard plugin (AgentAegis) — multi-layer defense for prompt, tool, and tool-result flows.",
   "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/antgroup/agent-aegis.git"
+  },
+  "homepage": "https://github.com/antgroup/agent-aegis#readme",
+  "bugs": {
+    "url": "https://github.com/antgroup/agent-aegis/issues"
+  },
   "main": "index.js",
   "files": [
-    "index.ts",
     "index.js",
-    "src/",
-    "runtime-api.ts",
+    "index.d.ts",
     "runtime-api.js",
+    "runtime-api.d.ts",
+    "src/**/*.js",
+    "src/**/*.d.ts",
     "openclaw.plugin.json",
-    "package.json",
     "README.md",
     "README_zh.md",
-    "LICENSE",
-    "rpc-handlers.ts",
-    "rpc-handlers.js",
-    "rpc-server.ts",
-    "rpc-server.js"
+    "LEGAL.md",
+    "LICENSE"
   ],
   "openclaw": {
     "extensions": [
       "./index.js"
-    ]
+    ],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2",
+      "minGatewayVersion": "2026.3.24-beta.2"
+    },
+    "build": {
+      "openclawVersion": "2026.3.24-beta.2",
+      "pluginSdkVersion": "2026.3.24-beta.2"
+    }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest"
   },

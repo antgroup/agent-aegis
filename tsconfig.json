@@ -4,11 +4,12 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "resolvePackageJsonExports": true,
-    "skipLibCheck": true,
-    "types": ["node"],
+    "declaration": true,
     "outDir": ".",
-    "declaration": false
+    "rootDir": ".",
+    "skipLibCheck": true,
+    "types": ["node"]
   },
   "include": ["*.ts", "src/**/*.ts"],
-  "exclude": ["web", "node_modules", "adapters"]
+  "exclude": ["web", "node_modules", "adapters", "**/__tests__/**", "**/*.test.ts"]
 }
