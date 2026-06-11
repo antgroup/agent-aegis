@@ -66,7 +66,18 @@
     "protectedPluginsHelp": "需要保护的插件 ID。",
     "protectedPluginsPlaceholder": "audit-guard",
     "advancedSettings": "高级设置",
-    "startupSkillScan": "启动时扫描技能"
+    "startupSkillScan": "启动时扫描技能",
+    "l2l3KernelDefense": "内核防御 (L2/L3)",
+    "kernelDefenseHelp": "eBPF/sentinel 边车——每个 agent 独立配置，重启边车生效。",
+    "nativeJudgeMode": "原生判定模式",
+    "kernelProbes": "内核探针",
+    "ebpfProbe": "eBPF tracepoint（观测）",
+    "uprobeProbe": "uprobe（观测）",
+    "lsmProbe": "LSM-BPF（内核内拦截）",
+    "sensitivePaths": "敏感路径",
+    "sensitivePathsHelp": "命中即标记的路径（子串匹配），如 /etc/shadow",
+    "scratchDirs": "临时目录",
+    "scratchDirsHelp": "从这些目录 execve 视为越权逃逸，如 /tmp"
   },
   "events": {
     "title": "安全事件",

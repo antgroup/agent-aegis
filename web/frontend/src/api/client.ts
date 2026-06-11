@@ -19,6 +19,12 @@ export const api = {
     request<{ config: import("@agent-aegis-web/shared").AegisConfig; defaults: import("@agent-aegis-web/shared").AegisConfig }>("/config", { method: "PUT", body: JSON.stringify(body) }),
   resetConfig: () =>
     request<{ config: import("@agent-aegis-web/shared").AegisConfig; defaults: import("@agent-aegis-web/shared").AegisConfig }>("/config/reset", { method: "POST" }),
+  getSentinelConfig: () =>
+    request<{ config: import("@agent-aegis-web/shared").SentinelConfig; defaults: import("@agent-aegis-web/shared").SentinelConfig }>("/sentinel-config"),
+  updateSentinelConfig: (body: import("@agent-aegis-web/shared").SentinelConfigUpdateRequest) =>
+    request<{ config: import("@agent-aegis-web/shared").SentinelConfig; defaults: import("@agent-aegis-web/shared").SentinelConfig }>("/sentinel-config", { method: "PUT", body: JSON.stringify(body) }),
+  resetSentinelConfig: () =>
+    request<{ config: import("@agent-aegis-web/shared").SentinelConfig; defaults: import("@agent-aegis-web/shared").SentinelConfig }>("/sentinel-config/reset", { method: "POST" }),
   getStatus: () => request<import("@agent-aegis-web/shared").StatusResponse>("/status"),
   getEvents: (params?: Record<string, string>) => {
     const qs = params ? "?" + new URLSearchParams(params).toString() : "";

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { DEFENSE_GROUPS } from "@agent-aegis-web/shared";
-import type { AegisConfig } from "@agent-aegis-web/shared";
-import { useConfig, useUpdateConfig, useResetConfig } from "../api/hooks";
+import type { AegisConfig, SentinelConfig } from "@agent-aegis-web/shared";
+import { useConfig, useUpdateConfig, useResetConfig, useSentinelConfig, useUpdateSentinelConfig } from "../api/hooks";
 import { MasterControls } from "../components/config/MasterControls";
+import { SentinelConfigCard } from "../components/config/SentinelConfigCard";
 import { DefenseGroup } from "../components/config/DefenseGroup";
 import { ArrayEditor } from "../components/config/ArrayEditor";
 import { ToggleSwitch } from "../components/common/ToggleSwitch";
@@ -14,8 +15,11 @@ export function ConfigPage() {
   const { data, isLoading, error } = useConfig();
   const updateMutation = useUpdateConfig();
   const resetMutation = useResetConfig();
+  const sentinelData = useSentinelConfig();
+  const sentinelUpdate = useUpdateSentinelConfig();
 
   const [draft, setDraft] = useState<AegisConfig | null>(null);
+  const [sentinelDraft, setSentinelDraft] = useState<SentinelConfig | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
@@ -23,6 +27,12 @@ export function ConfigPage() {
       setDraft({ ...data.config });
     }
   }, [data, draft]);
+
+  useEffect(() => {
+    if (sentinelData.data?.config && !sentinelDraft) {
+      setSentinelDraft({ ...sentinelData.data.config });
+    }
+  }, [sentinelData.data, sentinelDraft]);
 
   const patch = useCallback(
     (partial: Partial<AegisConfig>) => {
@@ -44,6 +54,26 @@ export function ConfigPage() {
   const reset = () => {
     resetMutation.mutate(undefined, {
       onSuccess: (result) => setDraft({ ...result.config }),
+    });
+  };
+
+  const patchSentinel = useCallback(
+    (partial: Partial<SentinelConfig>) => {
+      setSentinelDraft((prev) => (prev ? { ...prev, ...partial } : prev));
+    },
+    [],
+  );
+
+  const sentinelDirty = Boolean(
+    sentinelDraft &&
+      sentinelData.data?.config &&
+      JSON.stringify(sentinelDraft) !== JSON.stringify(sentinelData.data.config),
+  );
+
+  const sentinelSave = () => {
+    if (!sentinelDraft) return;
+    sentinelUpdate.mutate(sentinelDraft, {
+      onSuccess: (result) => setSentinelDraft({ ...result.config }),
     });
   };
 
@@ -132,6 +162,19 @@ export function ConfigPage() {
           onChange={(v) => patch({ protectedPlugins: v })}
         />
       </div>
+
+      <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-3">
+        {t("config.l2l3KernelDefense")}
+      </h2>
+      {sentinelDraft && (
+        <SentinelConfigCard
+          config={sentinelDraft}
+          isDirty={sentinelDirty}
+          isPending={sentinelUpdate.isPending}
+          onChange={patchSentinel}
+          onSave={sentinelSave}
+        />
+      )}
 
       <button
         type="button"

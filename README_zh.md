@@ -58,10 +58,10 @@ npm install && npm run build
 openclaw plugins install ./AgentAegis
 ```
 
-> ℹ️ 内核探针（`sentinel/probes/{ebpf,uprobe,lsm}`）**不在**此安装包内 —— 它们通过
-> `node:child_process` 拉起辅助进程，而 OpenClaw 的插件扫描器会拦截 `child_process`。
-> L1 工具调用层防御照常安装运行；要在 OpenClaw 上验证 eBPF/内核层，请**单独启动**探针
-> （见下文 *内核级防御 → 独立启动 eBPF 探针*）。
+> ℹ️ 内核探针（`sentinel/probes/{ebpf,uprobe,lsm}`）**不在**此安装包内 —— 它们需要 root，
+> 并通过 `node:child_process` 拉起辅助进程，而 OpenClaw 的插件扫描器会拦截 `child_process`。
+> L1 工具调用层防御照常安装运行；内核层（L2/L3）以**独立的 per-agent sidecar** 单独安装
+> （见下文 *内核级防御 → 启用*）。
 
 **3.** 信任该插件并重启 gateway 使其加载。在 `~/.openclaw/openclaw.json` 的 `plugins.allow` 中加入 `agent-aegis`，然后验证：
 
@@ -194,19 +194,30 @@ AgentAegis/
 │   ├── config.ts               # 配置解析与常量
 │   └── types.ts                # 核心领域类型（TurnSecurityState 等）
 │
-├── adapters/hermes/            # Hermes Agent 适配器（Python ↔ Node 桥接）
-│   ├── __init__.py             # 插件 register() —— 挂钩子 + 包裹工具
-│   ├── bridge.py               # 拉起 rpc-server.js；通过 stdio 走 JSON-RPC
-│   ├── tool_wrappers.py        # 包裹高危工具以实现执行期拦截
-│   ├── paths.py                # 解析插件 / 状态 / 配置路径
-│   ├── web-server.py           # 管理 WebUI 子进程
-│   ├── install.sh              # Hermes 自动化安装脚本
-│   ├── plugin.yaml             # Hermes 清单
-│   └── config.yaml             # 默认防御配置模板
+├── adapters/                   # 各运行时适配器与安装脚本
+│   ├── install-sentinel.sh     # per-agent L2/L3 sidecar 安装脚本（openclaw | hermes）
+│   └── hermes/                 # Hermes Agent 适配器（Python ↔ Node 桥接）
+│       ├── __init__.py         # 插件 register() —— 挂钩子 + 包裹工具
+│       ├── bridge.py           # 拉起 rpc-server.js；通过 stdio 走 JSON-RPC
+│       ├── tool_wrappers.py    # 包裹高危工具以实现执行期拦截
+│       ├── paths.py            # 解析插件 / 状态 / 配置路径
+│       ├── web-server.py       # 管理 WebUI 子进程
+│       ├── install.sh          # Hermes（L1）自动化安装脚本
+│       ├── plugin.yaml         # Hermes 清单
+│       └── config.yaml         # 默认防御配置模板
+│
+├── sentinel/                   # 框架无关的 L2/L3 内核防御子系统
+│   ├── channel/                # 探针事件 + 仅追加 JSONL 落盘 + 发布订阅
+│   ├── judges/                 # 判定逻辑（native judge：敏感路径 / 内核逃逸）
+│   ├── probes/                 # syscall 来源 —— ebpf/（tracepoint）、uprobe/（libc）、lsm/（enforce）
+│   ├── runtime/                # 智能体框架抽象（noop / openclaw / hermes 适配器）
+│   ├── sidecar/                # per-agent 独立 runner（run.mjs + config.example.json）
+│   ├── bootstrap.ts            # 按配置装配 probe + judge
+│   └── index.ts                # startSentinel(runtime) + SentinelHandle
 │
 ├── web/                        # WebUI 管理面板
 │   ├── shared/                 # 前后端共享的类型、Zod 校验 schema、防御分组元数据
-│   ├── api/                    # Express 后端（路由：config / status / events / skills）
+│   ├── api/                    # Express 后端（路由：config / sentinel-config / status / events / skills）
 │   └── frontend/               # React + Vite + TailwindCSS 前端（Dashboard、Config、Events、Skills）
 │
 └── docs/                       # WebUI 截图
@@ -239,29 +250,46 @@ AgentAegis/
   适合灰度上线 / 数据采集。
 - **enforce（强制）** —— `lsm` 探针在内核内拒绝高危 syscall。
 
-### 启用
+### 启用 —— per-agent sidecar（推荐）
 
-内核探针是**按需开启**的（仅 Linux），并通过 `node:child_process` 拉起各自的 runner。
-OpenClaw 的插件扫描器会拦截 `child_process`，因此这些探针**已从 OpenClaw 插件包中排除** ——
-L1 防御照常安装运行，内核层则通过**单独启动**探针来验证（见下一小节）。Hermes 仍随插件分发
-探针，并在 `config.yaml` 中启用。
+由于 eBPF 需要 **root**、而 OpenClaw 的插件扫描器又会拦截 `child_process`，内核探针无法
+放进已安装的 L1 插件里。它们改为以 **per-agent sidecar** 形态分发：每个 agent 拥有**自己**的
+安装目录、**自己**的配置、**自己**的启动脚本，事件也写进**该 agent 自己**的状态目录 ——
+让 OpenClaw 与 Hermes 的内核防御像各自的 L1 防御一样彼此独立。
 
-**Hermes** —— 编辑 `~/.hermes/plugins/agent-aegis/config.yaml`（安装脚本已写入该段，默认关闭），重启 Hermes：
+```bash
+# 为某个运行时安装 L2/L3 sidecar（若缺则自动构建 sentinel/）
+bash adapters/install-sentinel.sh openclaw   # -> ~/.openclaw/agent-aegis-sentinel/
+bash adapters/install-sentinel.sh hermes     # -> ~/.hermes/agent-aegis-sentinel/
+```
 
-```yaml
-nativeJudge:
-  mode: observe
-probes:
-  ebpf:
-    enabled: true
-  lsm:
-    enabled: false
-    minSeverity: high
+每次安装都会得到：`sentinel/`（子系统）、`config.json`（该 agent 专属的 L2/L3 配置，
+其中 `stateDir` 已预先指向该 agent 的事件目录，使 L1 + L2/L3 事件汇聚在一起）、以及
+`start-sentinel.sh`。以 root 启动：
+
+```bash
+sudo bash ~/.openclaw/agent-aegis-sentinel/start-sentinel.sh
+```
+
+配置方式：直接编辑 `<安装目录>/config.json`，或在 **WebUI Config 页 → Kernel Defense
+(L2/L3)** 区块可视化修改（它通过 `GET/PUT /api/v1/sentinel-config` 读写的正是这个文件）：
+
+```json
+{
+  "stateDir": "/root/.openclaw/plugins/agent-aegis",
+  "nativeJudge": { "mode": "observe", "sensitivePaths": ["/etc/shadow"], "scratchDirs": [] },
+  "probes": { "ebpf": { "enabled": true }, "uprobe": { "enabled": false }, "lsm": { "enabled": false, "minSeverity": "high" } }
+}
 ```
 
 要启用内核级实拦截，设 `nativeJudge.mode: enforce` **且** `probes.lsm.enabled: true`
-（`ebpf` tracepoint 探针只能观测，`lsm` 才在内核内拦截）。通过
+（`ebpf` / `uprobe` 探针只能观测，`lsm` 才在内核内拦截）。通过
 `nativeJudge.sensitivePaths` / `nativeJudge.scratchDirs` 可不改代码扩展覆盖范围。
+改动在 **sidecar 下次重启**时生效（无热加载）—— 详见 `sentinel/sidecar/README.md`。
+
+> Hermes 也可以不跑 sidecar，而是在其插件 `config.yaml` 的（`nativeJudge` / `probes` 段，
+> 随插件分发但默认关闭）中就地启用同一批探针 —— 但对两种运行时而言，per-agent sidecar
+> 都是推荐路径。
 
 **前置要求：** 支持 eBPF 的 Linux 内核、root、BCC（`bpfcc-tools`、`python3-bpfcc`）、
 以及已挂载的 `/sys/kernel/debug`。macOS/Windows 上请用下面的 Docker 一键验证（通过
@@ -328,7 +356,7 @@ npm run dev
   <img src="docs/webui-dashboard-zh.png" alt="WebUI 仪表盘" width="90%" />
 </p>
 
-**Config（配置编辑器）** — Master Controls（全局防御开关 + 默认拦截模式）、每项防御独立卡片、Protected Assets标签式编辑器、可折叠高级选项。支持脏状态追踪，Save / Reset to Defaults按钮。
+**Config（配置编辑器）** — Master Controls（全局防御开关 + 默认拦截模式）、每项防御独立卡片、Protected Assets标签式编辑器、用于该 agent sidecar 配置的 **Kernel Defense (L2/L3)** 区块、可折叠高级选项。支持脏状态追踪，Save / Reset to Defaults按钮。
 
 <p align="center">
   <img src="docs/webui-config-zh.png" alt="WebUI 配置编辑器" width="90%" />

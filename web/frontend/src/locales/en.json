@@ -66,7 +66,18 @@
     "protectedPluginsHelp": "Plugin IDs to protect.",
     "protectedPluginsPlaceholder": "audit-guard",
     "advancedSettings": "Advanced Settings",
-    "startupSkillScan": "Scan Skills at Startup"
+    "startupSkillScan": "Scan Skills at Startup",
+    "l2l3KernelDefense": "Kernel Defense (L2/L3)",
+    "kernelDefenseHelp": "eBPF/sentinel sidecar — a separate per-agent config; changes apply on sidecar restart.",
+    "nativeJudgeMode": "Native Judge Mode",
+    "kernelProbes": "Kernel Probes",
+    "ebpfProbe": "eBPF tracepoint (observe)",
+    "uprobeProbe": "uprobe (observe)",
+    "lsmProbe": "LSM-BPF (in-kernel enforce)",
+    "sensitivePaths": "Sensitive Paths",
+    "sensitivePathsHelp": "Paths flagged on access (substring match). e.g. /etc/shadow",
+    "scratchDirs": "Scratch Dirs",
+    "scratchDirsHelp": "execve from these dirs is treated as kernel-escape. e.g. /tmp"
   },
   "events": {
     "title": "Security Events",

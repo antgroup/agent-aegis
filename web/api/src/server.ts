@@ -9,7 +9,9 @@ import { createStatusRouter } from "./routes/status.js";
 import { createEventsRouter } from "./routes/events.js";
 import { createSkillsRouter } from "./routes/skills.js";
 import { createSkillScansRouter } from "./routes/skill-scans.js";
+import { createSentinelConfigRouter } from "./routes/sentinel-config.js";
 import { ConfigService } from "./services/config-service.js";
+import { SentinelConfigService } from "./services/sentinel-config-service.js";
 import { StateService } from "./services/state-service.js";
 import { EventService } from "./services/event-service.js";
 import { SkillScanEventService } from "./services/skill-scan-event-service.js";
@@ -18,6 +20,7 @@ import { FileWatcher } from "./services/file-watcher.js";
 export type ServerOptions = {
   configDir: string;
   stateDir: string;
+  sentinelConfigPath: string;
 };
 
 export function createServer(options: ServerOptions) {
@@ -27,6 +30,7 @@ export function createServer(options: ServerOptions) {
   app.use(express.json());
 
   const configService = new ConfigService(options.configDir);
+  const sentinelConfigService = new SentinelConfigService(options.sentinelConfigPath);
   const stateService = new StateService(options.stateDir);
   const eventService = new EventService();
   const skillScanEventService = new SkillScanEventService();
@@ -38,6 +42,7 @@ export function createServer(options: ServerOptions) {
   );
 
   app.use(`${API_PREFIX}/config`, createConfigRouter(configService));
+  app.use(`${API_PREFIX}/sentinel-config`, createSentinelConfigRouter(sentinelConfigService));
   app.use(`${API_PREFIX}/status`, createStatusRouter(configService, stateService));
   app.use(`${API_PREFIX}/events`, createEventsRouter(eventService));
   app.use(`${API_PREFIX}/skills`, createSkillsRouter(stateService, eventService));
