@@ -1,0 +1,42 @@
+# AgentAegis configuration for Hermes Agent.
+# All defenses are enabled by default in enforce mode.
+# Set a defense to false or its mode to "observe"/"off" to adjust.
+
+allDefensesEnabled: true
+defaultBlockingMode: enforce
+
+# --- Web UI Configuration ---
+# Set webPort to a number (e.g., 3800) to enable the Web UI
+# Set to 0 or remove to disable
+webPort: 3800
+
+# --- Individual defense toggles ---
+# selfProtectionEnabled: true
+# selfProtectionMode: enforce
+# commandBlockEnabled: true
+# commandBlockMode: enforce
+# encodingGuardEnabled: true
+# encodingGuardMode: enforce
+# scriptProvenanceGuardEnabled: true
+# memoryGuardEnabled: true
+# userRiskScanEnabled: true
+# skillScanEnabled: true
+# toolResultScanEnabled: true
+# outputRedactionEnabled: true
+# promptGuardEnabled: true
+# loopGuardEnabled: true
+# exfiltrationGuardMode: enforce
+# toolCallEnforcementEnabled: true
+# dispatchGuardEnabled: true
+
+# --- Protected paths (additional) ---
+# protectedPaths:
+#   - /path/to/sensitive/dir
+
+# --- Protected skills ---
+# protectedSkills:
+#   - important-skill
+
+# --- Protected plugins ---
+# protectedPlugins:
+#   - audit-guard

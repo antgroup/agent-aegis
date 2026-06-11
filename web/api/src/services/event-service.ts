@@ -1,4 +1,4 @@
-import type { SecurityEvent } from "@claw-aegis-web/shared";
+import type { SecurityEvent } from "@agent-aegis-web/shared";
 
 const MAX_EVENTS = 1000;
 

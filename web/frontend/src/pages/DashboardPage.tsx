@@ -1,7 +1,8 @@
-import { useStatus, useEvents } from "../api/hooks";
-import { StatsCards } from "../components/dashboard/StatsCards";
-import { DefenseStatusGrid } from "../components/dashboard/DefenseStatusGrid";
-import { IntegrityBadge } from "../components/dashboard/IntegrityBadge";
+import { useStatus, useEvents, useConfig, useChartEvents } from "../api/hooks";
+import { DefenseConfigCard } from "../components/dashboard/DefenseConfigCard";
+import { WeeklyEventChart } from "../components/dashboard/WeeklyEventChart";
+import { EventBreakdownChart } from "../components/dashboard/EventBreakdownChart";
+import { SkillTrustChart } from "../components/dashboard/SkillTrustChart";
 import { StatusBadge } from "../components/common/StatusBadge";
 import { Shield } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -9,14 +10,19 @@ import { useTranslation } from "react-i18next";
 export function DashboardPage() {
   const { t } = useTranslation();
   const { data: status, isLoading: statusLoading } = useStatus();
-  const { data: events } = useEvents({ limit: "10" });
+  const { data: configData } = useConfig();
+  const { data: recentEvents } = useEvents({ limit: "3" });
+  const { data: chartData } = useChartEvents();
 
   if (statusLoading) {
     return <div className="text-gray-500">{t("dashboard.loading")}</div>;
   }
 
+  const config = configData?.config;
+  const chartEvents = chartData?.events ?? [];
+
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Shield size={24} className="text-blue-600" />
         <h1 className="text-xl font-bold">{t("dashboard.title")}</h1>
@@ -27,26 +33,27 @@ export function DashboardPage() {
         )}
       </div>
 
-      {status && <StatsCards defenses={status.defenses} />}
-
+      {/* Top row: config summary + recent events */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          {status && <DefenseStatusGrid defenses={status.defenses} />}
-          {status && <IntegrityBadge integrity={status.integrity} />}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <p className="text-sm text-gray-500">
-              {t("dashboard.trustedSkills")} <span className="font-semibold text-gray-900">{status?.trustedSkillCount ?? 0}</span>
-            </p>
-          </div>
-        </div>
+        {status && (
+          <DefenseConfigCard
+            defenses={status.defenses}
+            trustedSkillCount={status.trustedSkillCount}
+            protectedPaths={config?.protectedPaths ?? []}
+            protectedSkills={config?.protectedSkills ?? []}
+            protectedPlugins={config?.protectedPlugins ?? []}
+          />
+        )}
 
-        <div className="bg-white rounded-lg border border-gray-200">
+        <div className="bg-white rounded-lg border border-gray-200 h-full">
           <div className="px-4 py-3 border-b border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-900">{t("dashboard.recentEvents")}</h3>
+            <h3 className="text-sm font-semibold text-gray-900">
+              {t("dashboard.recentEvents")}
+            </h3>
           </div>
-          {events?.events.length ? (
+          {recentEvents?.events.length ? (
             <div className="divide-y divide-gray-100">
-              {events.events.map((ev) => (
+              {recentEvents.events.map((ev) => (
                 <div key={ev.id} className="px-4 py-2.5">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-700">{ev.defense}</span>
@@ -60,9 +67,18 @@ export function DashboardPage() {
               ))}
             </div>
           ) : (
-            <div className="p-4 text-sm text-gray-400">{t("dashboard.noEvents")}</div>
+            <div className="p-4 text-sm text-gray-400">
+              {t("dashboard.noEvents")}
+            </div>
           )}
         </div>
+      </div>
+
+      {/* Bottom row: 3 charts */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <WeeklyEventChart events={chartEvents} />
+        <EventBreakdownChart events={chartEvents} />
+        <SkillTrustChart />
       </div>
     </div>
   );

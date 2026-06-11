@@ -1,8 +1,9 @@
 import { type OpenClawPluginApi } from "./runtime-api.js";
-import { createClawAegisRuntime } from "./src/handlers.js";
+import { createAgentAegisRuntime } from "./src/handlers.js";
 type GenericHookHandler = (event: any, ctx: any) => any;
 export declare function wrapHookFailOpen(api: OpenClawPluginApi, hookName: string, handler: GenericHookHandler): GenericHookHandler;
-export declare function registerClawAegisPlugin(api: OpenClawPluginApi, createRuntime?: typeof createClawAegisRuntime): void;
+export declare function wrapSyncHookFailOpen(api: OpenClawPluginApi, hookName: string, handler: GenericHookHandler): GenericHookHandler;
+export declare function registerAgentAegisPlugin(api: OpenClawPluginApi, createRuntime?: typeof createAgentAegisRuntime): void;
 declare const _default: {
     id: string;
     name: string;

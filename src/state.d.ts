@@ -1,5 +1,5 @@
 import type { AegisLogger, PromptSnapshot, RunSecuritySignalState, ScriptArtifactRecord, SecretFingerprintRecord, SkillAssessmentRecord, SelfIntegrityRecord, ToolCallRecord, ToolResultScanOutcome, TrustedSkillRecord, TurnSecurityState, WorkerHealthState } from "./types.js";
-export declare class ClawAegisState {
+export declare class AgentAegisState {
     private readonly params;
     private readonly turnStates;
     private readonly loopCounters;

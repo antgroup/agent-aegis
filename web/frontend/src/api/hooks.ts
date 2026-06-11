@@ -40,6 +40,14 @@ export function useEvents(params?: Record<string, string>) {
   });
 }
 
+export function useChartEvents() {
+  return useQuery({
+    queryKey: ["events", "chart"],
+    queryFn: () => api.getEvents({ limit: "500" }),
+    refetchInterval: 30_000,
+  });
+}
+
 export function useSkills() {
   return useQuery({
     queryKey: ["skills"],

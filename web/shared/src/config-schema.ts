@@ -34,6 +34,7 @@ export const aegisConfigSchema = z.object({
   protectedSkills: z.array(z.string()).optional(),
   protectedPlugins: z.array(z.string()).optional(),
   startupSkillScan: z.boolean().optional(),
+  webPort: z.number().optional(),
 });
 
 export type AegisConfigPartial = z.infer<typeof aegisConfigSchema>;

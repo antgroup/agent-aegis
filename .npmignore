@@ -1,0 +1,18 @@
+# Exclude Hermes-specific files from OpenClaw/npm installation
+adapters/
+plugin.yaml
+__init__.py
+HERMES_ADAPTATION_ANALYSIS_V2.md
+start-web-hermes.sh
+
+# Exclude development and temp files
+.git
+.gemini
+node_modules
+tsconfig.json
+vitest.config.ts
+src/__tests__
+web/api-hermes/
+web/frontend/
+web/shared/
+!web/api/dist

@@ -10,6 +10,6 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["index.ts", "runtime-api.ts", "src/**/*.ts"],
-  "exclude": ["web", "node_modules", "**/__tests__/**", "**/*.test.ts"]
+  "include": ["*.ts", "src/**/*.ts"],
+  "exclude": ["web", "node_modules", "adapters", "**/__tests__/**", "**/*.test.ts"]
 }

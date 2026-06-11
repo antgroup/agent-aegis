@@ -1,5 +1,5 @@
-import type { AegisConfig, DefenseMode } from "@claw-aegis-web/shared";
-import type { DefenseGroupMeta } from "@claw-aegis-web/shared";
+import type { AegisConfig, DefenseMode } from "@agent-aegis-web/shared";
+import type { DefenseGroupMeta } from "@agent-aegis-web/shared";
 import { ToggleSwitch } from "../common/ToggleSwitch";
 import { ModeSelector } from "../common/ModeSelector";
 import { useTranslation } from "react-i18next";

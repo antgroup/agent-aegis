@@ -1,7 +1,9 @@
-import { promises as fs } from "node:fs";
+import { promises as fs, existsSync } from "node:fs";
 import path from "node:path";
-import type { AegisConfig, ConfigUpdateRequest } from "@claw-aegis-web/shared";
-import { CONFIG_DEFAULTS, aegisConfigSchema } from "@claw-aegis-web/shared";
+import os from "node:os";
+import yaml from "js-yaml";
+import type { AegisConfig, ConfigUpdateRequest } from "@agent-aegis-web/shared";
+import { CONFIG_DEFAULTS, aegisConfigSchema } from "@agent-aegis-web/shared";
 
 type PluginJson = {
   id: string;
@@ -11,20 +13,44 @@ type PluginJson = {
 };
 
 export class ConfigService {
-  private readonly pluginJsonPath: string;
+  private readonly configPath: string;
+  private readonly isYaml: boolean;
   private lastMtime: Date | null = null;
 
   constructor(configDir: string) {
-    this.pluginJsonPath = path.join(configDir, "openclaw.plugin.json");
+    // Pick the config file by runtime. Hermes installs `config.yaml`; OpenClaw
+    // ships `openclaw.plugin.json`. Detect by what is actually on disk so it works
+    // no matter how the WebUI is launched (the Hermes launcher does not export
+    // AEGIS_APP), with AEGIS_APP kept as an explicit override.
+    const yamlPath = path.join(configDir, "config.yaml");
+    const jsonPath = path.join(configDir, "openclaw.plugin.json");
+
+    const envApp = process.env.AEGIS_APP;
+    let useYaml: boolean;
+    if (envApp === "hermes") {
+        useYaml = true;
+    } else if (envApp === "openclaw") {
+        useYaml = false;
+    } else if (existsSync(yamlPath)) {
+        // Hermes layout: config.yaml present (and no openclaw.plugin.json).
+        useYaml = true;
+    } else {
+        // OpenClaw layout (openclaw.plugin.json present), or a fresh dir — default
+        // to OpenClaw's JSON layout.
+        useYaml = false;
+    }
+
+    this.configPath = useYaml ? yamlPath : jsonPath;
+    this.isYaml = useYaml;
   }
 
-  getPluginJsonPath(): string {
-    return this.pluginJsonPath;
+  getConfigPath(): string {
+    return this.configPath;
   }
 
   async getConfigMtime(): Promise<string | null> {
     try {
-      const stat = await fs.stat(this.pluginJsonPath);
+      const stat = await fs.stat(this.configPath);
       this.lastMtime = stat.mtime;
       return stat.mtime.toISOString();
     } catch {
@@ -32,36 +58,50 @@ export class ConfigService {
     }
   }
 
-  private async readPluginJson(): Promise<PluginJson> {
-    const raw = await fs.readFile(this.pluginJsonPath, "utf8");
-    return JSON.parse(raw) as PluginJson;
+  private async readConfigRaw(): Promise<Record<string, unknown>> {
+    const raw = await fs.readFile(this.configPath, "utf8");
+    if (this.isYaml) {
+        return (yaml.load(raw) as Record<string, unknown>) ?? {};
+    } else {
+        const json = JSON.parse(raw) as PluginJson;
+        return (json.userConfig as Record<string, unknown>) ?? {};
+    }
   }
 
-  private async writePluginJson(data: PluginJson): Promise<void> {
-    const dir = path.dirname(this.pluginJsonPath);
+  private async writeConfigRaw(userConfig: Record<string, unknown>): Promise<void> {
+    const dir = path.dirname(this.configPath);
     await fs.mkdir(dir, { recursive: true });
-    const tempPath = `${this.pluginJsonPath}.${process.pid}.${Date.now()}.tmp`;
+    const tempPath = `${this.configPath}.${process.pid}.${Date.now()}.tmp`;
+    
     try {
-      await fs.writeFile(tempPath, JSON.stringify(data, null, 2) + "\n", "utf8");
-      await fs.rename(tempPath, this.pluginJsonPath);
+      if (this.isYaml) {
+          await fs.writeFile(tempPath, yaml.dump(userConfig, { indent: 2 }), "utf8");
+      } else {
+          const pluginJson = await this.readPluginJsonFile();
+          pluginJson.userConfig = userConfig;
+          await fs.writeFile(tempPath, JSON.stringify(pluginJson, null, 2) + "\n", "utf8");
+      }
+      await fs.rename(tempPath, this.configPath);
     } finally {
       await fs.rm(tempPath, { force: true }).catch(() => undefined);
     }
   }
 
+  private async readPluginJsonFile(): Promise<PluginJson> {
+    const raw = await fs.readFile(this.configPath, "utf8");
+    return JSON.parse(raw) as PluginJson;
+  }
+
   async getUserConfig(): Promise<Record<string, unknown>> {
     try {
-      const pluginJson = await this.readPluginJson();
-      return (pluginJson.userConfig as Record<string, unknown>) ?? {};
+      return await this.readConfigRaw();
     } catch {
       return {};
     }
   }
 
   resolveConfig(userConfig: Record<string, unknown>): AegisConfig {
-    const allDefensesEnabled = userConfig.allDefensesEnabled !== false
-      ? CONFIG_DEFAULTS.allDefensesEnabled
-      : false;
+    const allDefensesEnabled = userConfig.allDefensesEnabled !== false;
 
     const raw = userConfig;
     const isMode = (v: unknown): v is "off" | "observe" | "enforce" =>
@@ -80,46 +120,42 @@ export class ConfigService {
       return isMode(explicit) ? explicit : defaultMode;
     };
 
-    const selfProtectionMode = readMode("selfProtectionEnabled", "selfProtectionMode");
-    const commandBlockMode = readMode("commandBlockEnabled", "commandBlockMode");
-    const encodingGuardMode = readMode("encodingGuardEnabled", "encodingGuardMode");
-    const scriptProvenanceGuardMode = readMode("scriptProvenanceGuardEnabled", "scriptProvenanceGuardMode");
-    const memoryGuardMode = readMode("memoryGuardEnabled", "memoryGuardMode");
-    const loopGuardMode = readMode("loopGuardEnabled", "loopGuardMode");
-    const exfiltrationGuardMode = readMode("exfiltrationGuardEnabled", "exfiltrationGuardMode");
-    const dispatchGuardMode = readMode("dispatchGuardEnabled", "dispatchGuardMode");
-
     return {
       allDefensesEnabled,
       defaultBlockingMode: defaultMode,
-      selfProtectionEnabled: selfProtectionMode !== "off",
-      selfProtectionMode,
-      commandBlockEnabled: commandBlockMode !== "off",
-      commandBlockMode,
-      encodingGuardEnabled: encodingGuardMode !== "off",
-      encodingGuardMode,
-      scriptProvenanceGuardEnabled: scriptProvenanceGuardMode !== "off",
-      scriptProvenanceGuardMode,
-      memoryGuardEnabled: memoryGuardMode !== "off",
-      memoryGuardMode,
+      selfProtectionEnabled: readMode("selfProtectionEnabled", "selfProtectionMode") !== "off",
+      selfProtectionMode: readMode("selfProtectionEnabled", "selfProtectionMode"),
+      commandBlockEnabled: readMode("commandBlockEnabled", "commandBlockMode") !== "off",
+      commandBlockMode: readMode("commandBlockEnabled", "commandBlockMode"),
+      encodingGuardEnabled: readMode("encodingGuardEnabled", "encodingGuardMode") !== "off",
+      encodingGuardMode: readMode("encodingGuardEnabled", "encodingGuardMode"),
+      scriptProvenanceGuardEnabled: readMode("scriptProvenanceGuardEnabled", "scriptProvenanceGuardMode") !== "off",
+      scriptProvenanceGuardMode: readMode("scriptProvenanceGuardEnabled", "scriptProvenanceGuardMode"),
+      memoryGuardEnabled: readMode("memoryGuardEnabled", "memoryGuardMode") !== "off",
+      memoryGuardMode: readMode("memoryGuardEnabled", "memoryGuardMode"),
       userRiskScanEnabled: readEnabled("userRiskScanEnabled"),
       skillScanEnabled: readEnabled("skillScanEnabled"),
       toolResultScanEnabled: readEnabled("toolResultScanEnabled"),
       outputRedactionEnabled: readEnabled("outputRedactionEnabled"),
       promptGuardEnabled: readEnabled("promptGuardEnabled"),
-      loopGuardEnabled: loopGuardMode !== "off",
-      loopGuardMode,
-      exfiltrationGuardEnabled: exfiltrationGuardMode !== "off",
-      exfiltrationGuardMode,
+      loopGuardEnabled: readMode("loopGuardEnabled", "loopGuardMode") !== "off",
+      loopGuardMode: readMode("loopGuardEnabled", "loopGuardMode"),
+      exfiltrationGuardEnabled: readMode("exfiltrationGuardEnabled", "exfiltrationGuardMode") !== "off",
+      exfiltrationGuardMode: readMode("exfiltrationGuardEnabled", "exfiltrationGuardMode"),
       toolCallEnforcementEnabled: readEnabled("toolCallEnforcementEnabled"),
-      dispatchGuardEnabled: dispatchGuardMode !== "off",
-      dispatchGuardMode,
-      protectedPaths: normalizeStringArray(raw.protectedPaths),
-      protectedSkills: raw.protectedSkills !== undefined
-        ? normalizeStringArray(raw.protectedSkills)
-        : CONFIG_DEFAULTS.protectedSkills,
-      protectedPlugins: normalizeStringArray(raw.protectedPlugins),
+      dispatchGuardEnabled: readMode("dispatchGuardEnabled", "dispatchGuardMode") !== "off",
+      dispatchGuardMode: readMode("dispatchGuardEnabled", "dispatchGuardMode"),
+      protectedPaths: normalizeStringArray(raw.protectedPaths).map(p => 
+        p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p
+      ),
+      protectedSkills: normalizeStringArray(raw.protectedSkills).map(p => 
+        p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p
+      ),
+      protectedPlugins: normalizeStringArray(raw.protectedPlugins).map(p => 
+        p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : p
+      ),
       startupSkillScan: raw.startupSkillScan !== false,
+      webPort: typeof raw.webPort === "number" ? raw.webPort : undefined,
     };
   }
 
@@ -130,27 +166,21 @@ export class ConfigService {
 
   async updateConfig(update: ConfigUpdateRequest): Promise<AegisConfig> {
     const parsed = aegisConfigSchema.parse(update);
+    const current = await this.getUserConfig();
 
-    const pluginJson = await this.readPluginJson();
-    const currentUser = (pluginJson.userConfig as Record<string, unknown>) ?? {};
-
-    const merged: Record<string, unknown> = { ...currentUser };
+    const merged: Record<string, unknown> = { ...current };
     for (const [key, value] of Object.entries(parsed)) {
       if (value !== undefined) {
         merged[key] = value;
       }
     }
 
-    pluginJson.userConfig = merged;
-    await this.writePluginJson(pluginJson);
-
+    await this.writeConfigRaw(merged);
     return this.resolveConfig(merged);
   }
 
   async resetConfig(): Promise<AegisConfig> {
-    const pluginJson = await this.readPluginJson();
-    delete pluginJson.userConfig;
-    await this.writePluginJson(pluginJson);
+    await this.writeConfigRaw({});
     return this.resolveConfig({});
   }
 }

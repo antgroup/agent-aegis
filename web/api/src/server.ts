@@ -1,8 +1,9 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { API_PREFIX } from "@claw-aegis-web/shared";
+import { API_PREFIX } from "@agent-aegis-web/shared";
 import { createConfigRouter } from "./routes/config.js";
 import { createStatusRouter } from "./routes/status.js";
 import { createEventsRouter } from "./routes/events.js";
@@ -29,10 +30,11 @@ export function createServer(options: ServerOptions) {
   const stateService = new StateService(options.stateDir);
   const eventService = new EventService();
   const skillScanEventService = new SkillScanEventService();
+  
   const fileWatcher = new FileWatcher(configService, stateService, eventService, skillScanEventService);
 
   fileWatcher.start().catch((err) =>
-    console.error("[claw-aegis-web] FileWatcher start error:", err),
+    console.error("[agent-aegis-web] FileWatcher start error:", err),
   );
 
   app.use(`${API_PREFIX}/config`, createConfigRouter(configService));
@@ -42,21 +44,32 @@ export function createServer(options: ServerOptions) {
   app.use(`${API_PREFIX}/skill-scans`, createSkillScansRouter(skillScanEventService));
 
   app.get(`${API_PREFIX}/health`, (_req, res) => {
-    res.json({ status: "ok", version: "0.1.0" });
+    res.json({ 
+        status: "ok", 
+        version: "0.1.0",
+        app: process.env.AEGIS_APP || "openclaw"
+    });
   });
 
   // Serve frontend static files in production
-  const frontendDist = path.resolve(
+  const frontendDist = process.env.AEGIS_STATIC_DIR || path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
-    "../../frontend/dist",
+    // Support both source layout (../../frontend/dist) and installed layout (./static)
+    existsSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "./static"))
+      ? "./static"
+      : "../../frontend/dist",
   );
-  app.use(express.static(frontendDist));
-  app.get("*", (_req, res, next) => {
-    if (_req.path.startsWith(API_PREFIX)) return next();
-    res.sendFile(path.join(frontendDist, "index.html"), (err) => {
-      if (err) next();
+  if (existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+    app.get("*", (_req, res, next) => {
+      if (_req.path.startsWith(API_PREFIX)) return next();
+      res.sendFile(path.join(frontendDist, "index.html"), (err) => {
+        if (err) next();
+      });
     });
-  });
+  } else {
+    console.warn(`[agent-aegis-web] Static directory not found: ${frontendDist}. Web UI may not be available.`);
+  }
 
   // Error handler
   app.use(
@@ -66,10 +79,10 @@ export function createServer(options: ServerOptions) {
       res: express.Response,
       _next: express.NextFunction,
     ) => {
-      console.error("[claw-aegis-web] Error:", err.message);
+      console.error("[agent-aegis-web] Error:", err.message);
       res.status(500).json({ ok: false, error: err.message });
     },
   );
 
-  return app;
+  return { app };
 }

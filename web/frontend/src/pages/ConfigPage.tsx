@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { DEFENSE_GROUPS } from "@claw-aegis-web/shared";
-import type { AegisConfig } from "@claw-aegis-web/shared";
+import { DEFENSE_GROUPS } from "@agent-aegis-web/shared";
+import type { AegisConfig } from "@agent-aegis-web/shared";
 import { useConfig, useUpdateConfig, useResetConfig } from "../api/hooks";
 import { MasterControls } from "../components/config/MasterControls";
 import { DefenseGroup } from "../components/config/DefenseGroup";
@@ -62,7 +62,7 @@ export function ConfigPage() {
   const scanGroups = defenseGroups.slice(7);
 
   return (
-    <div className="max-w-4xl">
+    <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold">{t("config.title")}</h1>
         <div className="flex items-center gap-3">
@@ -91,7 +91,7 @@ export function ConfigPage() {
       <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-3">
         {t("config.executionGuards")}
       </h2>
-      <div className="grid gap-3 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3 mb-6">
         {mainGroups.map((g) => (
           <DefenseGroup key={g.id} group={g} config={draft} onChange={patch} />
         ))}
@@ -100,7 +100,7 @@ export function ConfigPage() {
       <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-3">
         {t("config.scanningOutput")}
       </h2>
-      <div className="grid gap-3 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-3 mb-6">
         {scanGroups.map((g) => (
           <DefenseGroup key={g.id} group={g} config={draft} onChange={patch} />
         ))}
@@ -109,7 +109,7 @@ export function ConfigPage() {
       <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-3">
         {t("config.protectedAssets")}
       </h2>
-      <div className="grid gap-3 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
         <ArrayEditor
           label={t("config.protectedPaths")}
           help={t("config.protectedPathsHelp")}
@@ -142,7 +142,7 @@ export function ConfigPage() {
         {t("config.advancedSettings")}
       </button>
       {showAdvanced && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6 space-y-4">
           <ToggleSwitch
             checked={draft.startupSkillScan}
             onChange={(v) => patch({ startupSkillScan: v })}

@@ -1,4 +1,4 @@
-import { ClawAegisState } from "./state.js";
+import { AgentAegisState } from "./state.js";
 import type { AegisLogger, SkillScanRequest, SkillRiskReview, SkillScanResult } from "./types.js";
 export declare class SkillScanService {
     private readonly params;
@@ -14,7 +14,7 @@ export declare class SkillScanService {
     private workerSupported;
     private lastPendingWorkerFailure;
     constructor(params: {
-        state: ClawAegisState;
+        state: AgentAegisState;
         logger: AegisLogger;
         now?: () => number;
         runner?: (request: SkillScanRequest) => Promise<SkillScanResult>;

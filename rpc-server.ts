@@ -1,0 +1,70 @@
+/**
+ * JSON-RPC stdio server for AgentAegis.
+ *
+ * Protocol: line-delimited JSON on stdin/stdout.
+ *   Request:  {"id":1, "method":"check_before_tool", "params":{...}}
+ *   Response: {"id":1, "result":{...}}
+ *   Error:    {"id":1, "error":{"message":"...", "code":-32000}}
+ *
+ * All diagnostic logging goes to stderr so it never corrupts the protocol.
+ *
+ * Usage:
+ *   node rpc-server.js              # interactive stdio mode
+ *   echo '{"id":1,...}' | node rpc-server.js   # single-shot pipe mode
+ */
+
+import { createInterface } from "node:readline";
+import { AegisRpcRuntime } from "./rpc-handlers.js";
+
+const runtime = new AegisRpcRuntime();
+
+const rl = createInterface({
+  input: process.stdin,
+  terminal: false,
+});
+
+function writeLine(obj: unknown): void {
+  process.stdout.write(JSON.stringify(obj) + "\n");
+}
+
+rl.on("line", async (line: string) => {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    writeLine({
+      id: null,
+      error: { message: "Parse error: invalid JSON", code: -32700 },
+    });
+    return;
+  }
+
+  const request = parsed as Record<string, unknown>;
+  const id = request.id ?? null;
+
+  if (typeof request.method !== "string") {
+    writeLine({
+      id,
+      error: { message: "Invalid request: missing method", code: -32600 },
+    });
+    return;
+  }
+
+  const response = await runtime.dispatch({
+    id: id as number | string,
+    method: request.method,
+    params: (request.params as Record<string, unknown>) ?? {},
+  });
+
+  writeLine(response);
+});
+
+rl.on("close", () => {
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => process.exit(0));
+process.on("SIGINT", () => process.exit(0));

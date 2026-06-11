@@ -1,14 +1,8 @@
 import type { PluginHookAfterToolCallEvent, PluginHookAgentEndEvent, PluginHookBeforePromptBuildEvent, OpenClawPluginApi, PluginHookBeforeMessageWriteEvent, PluginHookBeforePromptBuildResult, PluginHookBeforeToolCallEvent, PluginHookBeforeToolCallResult, PluginHookMessageSendingEvent, PluginHookMessageSendingResult, PluginHookSessionEndEvent } from "../runtime-api.js";
-import { type ToolCallDefenseStrategy } from "./security-strategies.js";
-import { SkillScanService } from "./scan-service.js";
-import { ClawAegisState } from "./state.js";
-export declare function createClawAegisRuntime(api: OpenClawPluginApi, options?: {
-    now?: () => number;
-    scanRunner?: (request: import("./types.js").SkillScanRequest) => Promise<import("./types.js").SkillScanResult>;
-    toolCallDefenseStrategies?: readonly ToolCallDefenseStrategy[];
-}): {
-    state: ClawAegisState;
-    scanService: SkillScanService;
+import { type AegisEngineOptions } from "./engine.js";
+export declare function createAgentAegisRuntime(api: OpenClawPluginApi, options?: AegisEngineOptions): {
+    state: import("./state.js").AgentAegisState;
+    scanService: import("./scan-service.js").SkillScanService;
     hooks: {
         gateway_start: () => Promise<void>;
         message_received: (event: {
@@ -24,37 +18,23 @@ export declare function createClawAegisRuntime(api: OpenClawPluginApi, options?:
         }) => Promise<PluginHookBeforePromptBuildResult | undefined>;
         before_dispatch: (event: {
             content: string;
-            body?: string;
-            channel?: string;
-            sessionKey?: string;
-            senderId?: string;
-            isGroup?: boolean;
-            timestamp?: number;
         }, ctx: {
-            channelId?: string;
-            accountId?: string;
-            conversationId?: string;
             sessionKey?: string;
-            senderId?: string;
         }) => Promise<{
-            handled: boolean;
+            block: boolean;
+            reason?: string;
             text?: string;
         } | undefined>;
         before_agent_reply: (event: {
             cleanedBody: string;
         }, ctx: {
-            runId?: string;
-            agentId?: string;
             sessionKey?: string;
-            sessionId?: string;
-            workspaceDir?: string;
-            trigger?: string;
         }) => Promise<{
             handled: boolean;
-            reply?: {
+            reply: {
                 text: string;
             };
-            reason?: string;
+            reason: string;
         } | undefined>;
         before_tool_call: (event: PluginHookBeforeToolCallEvent, ctx: {
             sessionKey?: string;
@@ -66,13 +46,8 @@ export declare function createClawAegisRuntime(api: OpenClawPluginApi, options?:
         }) => void;
         llm_output: (event: {
             assistantTexts: string[];
-            runId: string;
-            sessionId: string;
-            provider: string;
             model: string;
-        }, _ctx: {
-            sessionKey?: string;
-            runId?: string;
+            provider: string;
         }) => void;
         agent_end: (_event: PluginHookAgentEndEvent, ctx: {
             sessionKey?: string;
@@ -84,7 +59,7 @@ export declare function createClawAegisRuntime(api: OpenClawPluginApi, options?:
         before_message_write: (event: PluginHookBeforeMessageWriteEvent, ctx: {
             sessionKey?: string;
         }) => {
-            message: never;
+            message: any;
         } | undefined;
     };
 };

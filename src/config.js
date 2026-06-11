@@ -1,5 +1,5 @@
 import path from "node:path";
-export const CLAW_AEGIS_PLUGIN_ID = "agent-aegis";
+export const AGENT_AEGIS_PLUGIN_ID = "agent-aegis";
 export const DEFENSE_MODES = ["off", "observe", "enforce"];
 export const TURN_STATE_TTL_MS = 5 * 60_000;
 export const LOOP_GUARD_TTL_MS = 5 * 60_000;
@@ -18,11 +18,12 @@ export const SKILL_SCAN_FAILURE_WINDOW_MS = 60_000;
 export const SKILL_SCAN_FAILURE_THRESHOLD = 3;
 export const SKILL_SCAN_FILE_MAX_BYTES = 100 * 1024;
 export const SKILL_SCAN_TARGET_FILENAME = "SKILL.md";
+export const SKILL_SCAN_ALLOWED_EXTENSIONS = [".md", ".py", ".sh", ".js"];
 export const TRUSTED_SKILLS_FILENAME = "trusted-skills.json";
 export const SELF_INTEGRITY_FILENAME = "self-integrity.json";
 export const DEFENSE_EVENTS_FILENAME = "defense-events.jsonl";
 export const SKILL_SCAN_EVENTS_FILENAME = "skill-scan-events.jsonl";
-export const BLOCK_REASON_PROTECTED_PATH = "安全限制：禁止访问、查询、修改、删除、关闭或绕过受保护的敏感路径、配置、重要 skill 或 claw-aegis 插件目录。";
+export const BLOCK_REASON_PROTECTED_PATH = "安全限制：禁止访问、查询、修改、删除、关闭或绕过受保护的敏感路径、配置、重要 skill 或 agent-aegis 插件目录。";
 export const BLOCK_REASON_WORKSPACE_DELETE = "安全限制：禁止删除 workspace 之外的路径。";
 export const BLOCK_REASON_OPENCLAW_COMMAND = "安全限制：禁止执行 openclaw CLI 或控制命令。";
 export const BLOCK_REASON_HIGH_RISK_OPERATION = "安全限制：已阻止本次高风险操作请求。";
@@ -39,7 +40,7 @@ const defaultDefenseModeSchema = {
     enum: [...DEFENSE_MODES],
     default: "enforce",
 };
-export const clawAegisPluginConfigSchema = {
+export const agentAegisPluginConfigSchema = {
     type: "object",
     additionalProperties: false,
     properties: {
@@ -93,10 +94,10 @@ export const clawAegisPluginConfigSchema = {
         },
     },
 };
-export const clawAegisPluginUiHints = {
+export const agentAegisPluginUiHints = {
     allDefensesEnabled: {
         label: "Enable All Defenses",
-        help: "Master switch for every claw-aegis defense below.",
+        help: "Master switch for every agent-aegis defense below.",
     },
     defaultBlockingMode: {
         label: "Default Blocking Mode",
@@ -215,20 +216,20 @@ export const clawAegisPluginUiHints = {
     },
     skillRoots: {
         label: "Additional Skill Roots (Ignored)",
-        help: "Deprecated. claw-aegis v1 now scans only ~/.openclaw/skills and ~/.openclaw/workspace/skills.",
+        help: "Deprecated. agent-aegis v1 now scans only ~/.openclaw/skills and ~/.openclaw/workspace/skills.",
         advanced: true,
         placeholder: "/path/to/skills",
     },
     extraProtectedRoots: {
         label: "Additional Protected Roots",
-        help: "Legacy compatibility alias of protectedPaths. Extra directories that claw-aegis should treat as protected paths.",
+        help: "Legacy compatibility alias of protectedPaths. Extra directories that agent-aegis should treat as protected paths.",
         advanced: true,
         placeholder: "/path/to/protected",
     },
 };
-export const clawAegisPluginConfigDefinition = {
-    jsonSchema: clawAegisPluginConfigSchema,
-    uiHints: clawAegisPluginUiHints,
+export const agentAegisPluginConfigDefinition = {
+    jsonSchema: agentAegisPluginConfigSchema,
+    uiHints: agentAegisPluginUiHints,
 };
 function normalizeStringList(value, resolvePath) {
     if (!Array.isArray(value)) {
@@ -285,8 +286,8 @@ function readDefenseMode(raw, params) {
     const explicitMode = raw[params.modeKey];
     return isDefenseMode(explicitMode) ? explicitMode : params.defaultMode;
 }
-export function resolveClawAegisPluginConfig(api) {
-    const raw = (api.pluginConfig ?? {});
+export function resolveAgentAegisPluginConfig(params) {
+    const raw = (params.pluginConfig ?? {});
     const allDefensesEnabled = raw.allDefensesEnabled !== false;
     const defaultBlockingMode = isDefenseMode(raw.defaultBlockingMode)
         ? raw.defaultBlockingMode
@@ -364,16 +365,22 @@ export function resolveClawAegisPluginConfig(api) {
         toolCallEnforcementEnabled: readEnabledFlag(raw, "toolCallEnforcementEnabled", allDefensesEnabled),
         dispatchGuardEnabled: dispatchGuardMode !== "off",
         dispatchGuardMode,
-        protectedPaths: normalizeStringList(raw.protectedPaths, api.resolvePath),
+        protectedPaths: normalizeStringList(raw.protectedPaths, params.resolvePath),
         protectedSkills: normalizeIdentifierList(raw.protectedSkills),
         protectedPlugins: normalizeIdentifierList(raw.protectedPlugins),
-        skillRoots: normalizeStringList(raw.skillRoots, api.resolvePath),
-        extraProtectedRoots: normalizeStringList(raw.extraProtectedRoots, api.resolvePath),
+        skillRoots: normalizeStringList(raw.skillRoots, params.resolvePath),
+        extraProtectedRoots: normalizeStringList(raw.extraProtectedRoots, params.resolvePath),
         startupSkillScan: raw.startupSkillScan !== false,
     };
 }
-export function resolveClawAegisStateDir(api) {
-    return path.join(api.runtime.state.resolveStateDir(), "plugins", CLAW_AEGIS_PLUGIN_ID);
+export function resolveAgentAegisPluginConfigFromApi(api) {
+    return resolveAgentAegisPluginConfig({
+        pluginConfig: api.pluginConfig,
+        resolvePath: (p) => api.resolvePath(p),
+    });
+}
+export function resolveAgentAegisStateDir(api) {
+    return path.join(api.runtime.state.resolveStateDir(), "plugins", AGENT_AEGIS_PLUGIN_ID);
 }
 export function resolveSkillScanRoots(api) {
     const stateRoot = path.resolve(api.runtime.state.resolveStateDir());

@@ -1,4 +1,4 @@
-import type { SelfIntegrityStatus } from "@claw-aegis-web/shared";
+import type { SelfIntegrityStatus } from "@agent-aegis-web/shared";
 import { ShieldCheck, ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 

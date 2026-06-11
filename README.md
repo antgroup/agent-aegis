@@ -1,5 +1,3 @@
-
-
 # AgentAegis
 
 <p align="center"> 
@@ -36,28 +34,38 @@ Through this layered, progressive mechanism, AgentAegis ensures that OpenClaw po
 
 ## 🚀 Quick Start
 
-**1.** Clone AgentAegis:
+AgentAegis runs on two agent runtimes. Each section below is self-contained: **install → enable → start the WebUI**.
+
+### For OpenClaw — `openclaw@latest`
+
+**Prerequisites:** Node.js ≥ 20 and the latest OpenClaw CLI.
 
 ```bash
-git clone https://github.com/antgroup/agent-aegis
+npm install -g openclaw@latest
+openclaw --version
 ```
 
-**2.** Install the plugin:
+**1.** Clone and build the plugin (it ships as TypeScript):
 
 ```bash
-openclaw plugins install ./agent-aegis
+git clone https://github.com/antgroup/AgentAegis.git
+cd AgentAegis
+npm install && npm run build
 ```
 
-**3.** (Optional) Enable AgentAegis with observe mode for safe rollout:
+**2.** Install it into OpenClaw — this copies the plugin to `~/.openclaw/extensions/agent-aegis`:
 
-```json
-{
-  "allDefensesEnabled": true,
-  "defaultBlockingMode": "observe"
-}
+```bash
+openclaw plugins install ./AgentAegis
 ```
 
-**4.** (Optional) Promote high-confidence defenses to `enforce` as needed:
+**3.** Trust it and restart the gateway so it loads. Add `agent-aegis` to `plugins.allow` in `~/.openclaw/openclaw.json`, then verify:
+
+```bash
+openclaw plugins list      # agent-aegis -> enabled
+```
+
+**4.** (Optional) Tune defenses via the `userConfig` block in `openclaw.plugin.json` — roll out in `observe`, then promote high-confidence defenses to `enforce`:
 
 ```json
 {
@@ -69,6 +77,66 @@ openclaw plugins install ./agent-aegis
   "exfiltrationGuardMode": "enforce"
 }
 ```
+
+**5.** Start the WebUI (served from the installed plugin's `web/` directory):
+
+```bash
+# macOS / Linux
+cd ~/.openclaw/extensions/agent-aegis/web
+# Windows: cd %USERPROFILE%\.openclaw\extensions\agent-aegis\web
+npm install && npm run build && npm start
+```
+
+Open `http://localhost:3800`.
+
+### For Hermes Agent — `hermes-agent@latest`
+
+**Prerequisites:** Node.js ≥ 20, Python 3, and the latest Hermes Agent installed (`hermes --version`).
+
+**1.** Clone and run the automated installer. It builds the engine + WebUI and installs everything to `~/.hermes/plugins/agent-aegis` (engine, RPC server, config, state dir):
+
+```bash
+git clone https://github.com/antgroup/AgentAegis.git
+cd AgentAegis
+bash adapters/hermes/install.sh
+```
+
+**2.** Enable the plugin — use the CLI (it writes `plugins.enabled` in `~/.hermes/config.yaml`):
+
+```bash
+hermes plugins enable agent-aegis
+hermes plugins list                 # agent-aegis -> enabled
+```
+
+> Equivalent manual edit (instead of the CLI): add `agent-aegis` under `plugins.enabled` in `~/.hermes/config.yaml`.
+
+**(Optional) Let AgentAegis own blocking.** AgentAegis's defenses work regardless of Hermes's own approval mode — the two are independent. But if Hermes `approvals.mode` is `manual`/`smart`, a dangerous operation gets prompted by **both** Hermes and AgentAegis (double prompts), and `manual` can hang in non-interactive runs. To make AgentAegis the single gate, set `approvals.mode: off` in `~/.hermes/config.yaml`:
+
+```yaml
+approvals:
+  mode: off
+```
+
+Keep `manual` if you deliberately want Hermes's human approval as an extra layer.
+
+**3.** Restart Hermes. Review defense settings in `~/.hermes/plugins/agent-aegis/config.yaml`.
+
+**4.** Start the WebUI with the standalone launcher (run from the cloned repo):
+
+```bash
+cd AgentAegis
+./start-web-hermes.sh
+```
+
+Open `http://localhost:3800`. Alternatively, set `webPort: 3800` in `~/.hermes/plugins/agent-aegis/config.yaml` to start the WebUI automatically alongside the agent.
+
+---
+
+## ⚠️ Operational notes
+
+- **Config changes require a restart.** Both runtimes read the defense config only at startup. After editing the config file (`config.yaml` for Hermes, `openclaw.plugin.json` for OpenClaw) or changing settings in the WebUI, restart the agent — a running session keeps the old config. (For Hermes, make sure the old `rpc-server.js` child process has exited before restarting.)
+- **`observe` logs, `enforce` blocks.** A defense in `observe` mode records detections but lets the action through; only `enforce` actually blocks. Roll out in `observe`, then promote high-confidence defenses to `enforce`.
+- **Hermes must load plugins to defend.** Use the gateway / interactive chat — `hermes -z` (oneshot) loads no plugins, so no defense runs. On startup the log should report `N high-risk tools wrapped` with N > 0, which is what arms tool-call blocking. Set `approvals.mode: off` to let AgentAegis own blocking.
 
 ---
 
@@ -99,34 +167,45 @@ Beyond the built-in runtime defenses, AgentAegis gives security operators and en
 
 ```
 AgentAegis/
-├── index.ts                    # Plugin entry point; registers lifecycle hooks
-├── runtime-api.ts              # Type definitions for OpenClaw plugin API
-├── openclaw.plugin.json        # Plugin manifest with config schema and UI hints
+├── index.ts                    # OpenClaw plugin entry — registers lifecycle hooks
+├── runtime-api.ts              # OpenClaw plugin API type definitions
+├── rpc-server.ts               # JSON-RPC server exposing the engine (driven by the Hermes bridge)
+├── rpc-handlers.ts             # RPC method handlers (check_before_tool, check_user_input, …)
+├── __init__.py                 # Hermes proxy entry — delegates to adapters/hermes/
+├── openclaw.plugin.json        # OpenClaw manifest (config schema + UI hints)
+├── plugin.yaml                 # Hermes plugin manifest
 ├── package.json                # Package metadata (@openclaw/agent-aegis)
-├── tsconfig.json               # TypeScript configuration
-├── LEGAL.md                    # Legal disclaimer
-└── src/
-    ├── types.ts                # Core domain types (TurnSecurityState, etc.)
-    ├── config.ts               # Configuration resolution and constants
-    ├── handlers.ts             # Main runtime logic; all hook handlers
-    ├── rules.ts                # Detection rules and scanning logic
-    ├── security-strategies.ts  # Defense strategy definitions and patterns
-    ├── state.ts                # In-memory and persisted state management
-    ├── scan-service.ts         # Skill scanning service with queue management
-    ├── scan-worker.ts          # Worker logic for individual skill scans
-    ├── command-obfuscation.ts  # Shell command obfuscation detection
-    └── encoding-guard.ts       # Encoded payload detection
-└── web/                        # WebUI management panel
-    ├── shared/                 # Shared types, Zod schemas, defense group metadata
-    ├── api/                    # Express backend service
-    │   └── src/
-    │       ├── routes/         # API routes (config, status, events, skills)
-    │       └── services/       # Business logic (config R/W, status, events, file watcher)
-    └── frontend/               # React + Vite + TailwindCSS frontend
-        └── src/
-            ├── api/            # API client wrappers + React Query hooks
-            ├── pages/          # Page components (Dashboard, Config, Events, Skills)
-            └── components/     # UI components (layout, dashboard, config editor, controls)
+├── start-web-hermes.sh         # Standalone Hermes WebUI launcher
+│
+├── src/                        # Detection engine — shared by both runtimes
+│   ├── engine.ts               # Core defense engine + defense-event logging
+│   ├── handlers.ts             # Lifecycle hook handlers / runtime logic
+│   ├── rules.ts                # Detection rules and scanning logic
+│   ├── security-strategies.ts  # Defense strategy definitions and patterns
+│   ├── command-obfuscation.ts  # Shell command obfuscation detection
+│   ├── encoding-guard.ts       # Encoded payload detection
+│   ├── scan-service.ts         # Skill scanning service with queue management
+│   ├── scan-worker.ts          # Per-skill scan worker
+│   ├── state.ts                # In-memory and persisted state management
+│   ├── config.ts               # Configuration resolution and constants
+│   └── types.ts                # Core domain types (TurnSecurityState, etc.)
+│
+├── adapters/hermes/            # Hermes Agent adapter (Python ↔ Node bridge)
+│   ├── __init__.py             # Plugin register() — wires hooks + wraps tools
+│   ├── bridge.py               # Spawns rpc-server.js; JSON-RPC over stdio
+│   ├── tool_wrappers.py        # Wraps high-risk tools for in-flight blocking
+│   ├── paths.py                # Resolves plugin / state / config paths
+│   ├── web-server.py           # Manages the WebUI subprocess
+│   ├── install.sh              # Automated Hermes installer
+│   ├── plugin.yaml             # Hermes manifest
+│   └── config.yaml             # Default defense config template
+│
+├── web/                        # WebUI management panel
+│   ├── shared/                 # Shared types, Zod schemas, defense group metadata
+│   ├── api/                    # Express backend (routes: config / status / events / skills)
+│   └── frontend/               # React + Vite + TailwindCSS frontend (Dashboard, Config, Events, Skills)
+│
+└── docs/                       # WebUI screenshots
 ```
 
 ---
@@ -135,25 +214,12 @@ AgentAegis/
 
 AgentAegis includes a standalone Web management panel for visually configuring defense policies, viewing security status, browsing event logs, and managing Skill scans.
 
-### Quick Start
+### Starting the WebUI
 
-After installing the plugin, navigate to the plugin directory and start the WebUI:
+The **[Quick Start](#-quick-start)** above already covers starting the WebUI for each runtime. In short, the panel runs on `http://localhost:3800`:
 
-```bash
-# macOS / Linux
-cd ~/.openclaw/extensions/agent-aegis/web
-
-# Windows
-cd %USERPROFILE%\.openclaw\extensions\agent-aegis\web
-```
-
-```bash
-npm install
-npm run build
-npm start
-```
-
-Open `http://localhost:3800` to access the management panel.
+- **OpenClaw:** `npm install && npm run build && npm start` from `~/.openclaw/extensions/agent-aegis/web`
+- **Hermes:** `./start-web-hermes.sh` from the cloned repo (or set `webPort: 3800` in the plugin `config.yaml`)
 
 For development mode with hot-reload:
 
