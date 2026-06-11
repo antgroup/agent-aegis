@@ -15,6 +15,10 @@ web/frontend/dist/
 __pycache__/
 *.pyc
 
+# Generated sentinel type declarations — declaration:true emits these, but they
+# are not in the npm files whitelist, so keep them out of git.
+sentinel/**/*.d.ts
+
 # Lockfiles (regenerated on install)
 package-lock.json
 
@@ -41,3 +45,5 @@ CLAUDE.md
 # OS junk
 .DS_Store
 Thumbs.db
+
+CHANGELOG*.md

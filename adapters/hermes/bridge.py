@@ -131,6 +131,41 @@ class AegisEngine:
         except (ValueError, OSError):
             pass  # pipe closed
 
+    def _readline_timeout(self, proc: subprocess.Popen, timeout: float) -> str:
+        """Read one line from proc.stdout, bounded by ``timeout`` seconds.
+
+        ``readline()`` cannot time out on its own, so run it in a daemon thread
+        and join with a deadline. On timeout the subprocess is assumed hung:
+        kill it (so ``_restart_if_needed`` spins up a fresh one on the next
+        call) and raise so the caller fails fast instead of freezing forever.
+        """
+        box: Dict[str, Any] = {}
+
+        def _read() -> None:
+            try:
+                box["line"] = proc.stdout.readline()
+            except Exception as exc:  # noqa: BLE001 - pipe teardown races
+                box["err"] = exc
+
+        reader = threading.Thread(target=_read, daemon=True)
+        reader.start()
+        reader.join(timeout)
+        if reader.is_alive():
+            logger.error(
+                "AgentAegis RPC readline timed out after %.1fs; killing subprocess",
+                timeout,
+            )
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            if proc is self._proc:
+                self._proc = None
+            raise RuntimeError(f"AgentAegis RPC call timed out after {timeout}s")
+        if "err" in box:
+            raise box["err"]
+        return box.get("line", "")
+
     # ------------------------------------------------------------------
     # RPC call
     # ------------------------------------------------------------------

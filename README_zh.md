@@ -209,7 +209,6 @@ AgentAegis/
 │   ├── api/                    # Express 后端（路由：config / status / events / skills）
 │   └── frontend/               # React + Vite + TailwindCSS 前端（Dashboard、Config、Events、Skills）
 │
-├── sentinel/                   # （实验性）内核级 eBPF/LSM 探针 runner
 └── docs/                       # WebUI 截图
 ```
 

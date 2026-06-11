@@ -140,7 +140,7 @@ async function startSentinelForOpenClaw(
 export default definePluginEntry({
   id: "agent-aegis",
   name: "Agent Aegis",
-  description: "Minimal safety guard plugin for prompt, tool, and tool-result hardening.",
+  description: "Multi-layer runtime safety guard plugin for OpenClaw (prompt, tool, tool-result, memory, skill, and output protection).",
   configSchema: agentAegisPluginConfigDefinition,
   register(api: OpenClawPluginApi) {
     registerAgentAegisPlugin(api);
