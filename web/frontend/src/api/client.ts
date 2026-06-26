@@ -3,15 +3,26 @@ import type { ApiResponse } from "@claw-aegis-web/shared";
 
 const BASE = API_PREFIX;
 
-// The server injects the API token into the served HTML as <meta name="aegis-token">.
-// It is required on write requests; we attach it to every request for simplicity.
-// In dev, the Vite proxy injects the header instead, so the meta may be absent.
+const TOKEN_STORAGE_KEY = "aegis-token";
+
+// Default mode: the server injects the token into the served HTML as
+// <meta name="aegis-token"> and we use it transparently. Hardened mode
+// (AEGIS_TOKEN set): the token is NOT served, so we fall back to one the
+// operator entered (persisted in localStorage), prompting once on a 401.
+// In dev, the Vite proxy injects the header, so neither may be present.
 function authToken(): string | undefined {
-  if (typeof document === "undefined") return undefined;
-  return document.querySelector('meta[name="aegis-token"]')?.getAttribute("content") ?? undefined;
+  if (typeof document !== "undefined") {
+    const meta = document.querySelector('meta[name="aegis-token"]')?.getAttribute("content");
+    if (meta) return meta;
+  }
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
   const token = authToken();
   const res = await fetch(`${BASE}${path}`, {
     headers: {
@@ -21,6 +32,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
     ...init,
   });
+
+  if (res.status === 401 && !retried && typeof window !== "undefined") {
+    const entered = window.prompt(
+      "This action requires the Agent Aegis API token.\n" +
+        "Find it in the server console log or the .aegis-webui-token file (or your AEGIS_TOKEN value):",
+    );
+    if (entered?.trim()) {
+      try {
+        localStorage.setItem(TOKEN_STORAGE_KEY, entered.trim());
+      } catch {
+        /* storage unavailable; will re-prompt next time */
+      }
+      return request<T>(path, init, true);
+    }
+  }
+
   const json = (await res.json()) as ApiResponse<T>;
   if (!json.ok) throw new Error(json.error);
   return json.data;

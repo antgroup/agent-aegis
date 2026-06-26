@@ -182,7 +182,10 @@ npm start -- --port=3800 --host=127.0.0.1 --config-dir=/path/to/plugin --state-d
 > - **写接口鉴权**：所有变更类请求（`PUT`/`POST`/`DELETE`）必须携带 token（`x-aegis-token` 头、`Authorization: Bearer` 或 `?token=`）。token 默认自动生成、打印到控制台并写入 `AEGIS_CONFIG_DIR/.aegis-webui-token`（权限 `0600`）；同源 UI 会自动注入该 token，本地 CLI 可从该文件读取。只读 `GET` 不需要 token，UI 加载无摩擦。
 > - 这一并关闭了「本地非浏览器调用者（如被注入的 agent 直接发 HTTP PUT）经 WebUI 绕过 agent-aegis 自身清单保护」的混淆代理向量。
 >
-> **关于本地代码执行的残余风险**：自动生成的 token 会注入到同源页面，已取得本机代码执行能力的攻击者（如完全受控的 agent）仍可读取该 token 或 `.aegis-webui-token` 文件后调用写接口。如需硬性保证，请用 `AEGIS_TOKEN` 带外提供 token，并将 `AEGIS_CONFIG_DIR` 指向 agent-aegis 的受保护路径（使被注入的 agent 无法读取该 token 文件）。
+> **默认模式 vs 强化模式**
+>
+> - **默认模式（不设 `AEGIS_TOKEN`）**：自动生成 token 并注入到同源页面，浏览器 UI 零配置可用。但该 token 会随页面 HTML 提供，**已取得本机代码执行能力的攻击者（如被注入的 agent）可通过 `GET /` 读取页面里的 token 后调用写接口**——默认模式不防这种本地攻击者。
+> - **强化模式（设置 `AEGIS_TOKEN`）**：token 由环境带外提供，**不会注入页面、不随 HTML 下发**。首次在 UI 执行写操作（保存/重置）时会弹窗要求输入 token（从控制台日志或自设的 `AEGIS_TOKEN` 取得），输入后存于浏览器 localStorage。这样被注入的 agent 无法从页面拿到 token。如需更彻底,可将 `AEGIS_CONFIG_DIR` 指向 agent-aegis 受保护路径,使 agent 也读不到 `.aegis-webui-token`。
 
 ## 配置读写机制
 

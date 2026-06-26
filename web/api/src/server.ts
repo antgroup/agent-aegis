@@ -117,9 +117,15 @@ export function createServer(options: ServerOptions) {
   app.use(express.json());
   app.use(API_PREFIX, createApiAccessGuard(token));
 
+  // Hardened mode: when the token is provided out-of-band via AEGIS_TOKEN we do
+  // NOT serve it to clients (see serveIndex below) so a local agent cannot read
+  // it from the page. The operator enters it into the UI once. In default mode
+  // the auto-generated token is injected for zero-friction local use.
+  const injectToken = !fromEnv;
   console.log(
     fromEnv
-      ? "[claw-aegis-web] API write auth: token required (from AEGIS_TOKEN)."
+      ? "[claw-aegis-web] API write auth: token required (from AEGIS_TOKEN). " +
+          "Token is NOT served to the UI; enter it in the UI when prompted."
       : `[claw-aegis-web] API write auth: token required. Token: ${token}`,
   );
 
@@ -143,29 +149,32 @@ export function createServer(options: ServerOptions) {
     res.json({ status: "ok", version: "0.1.0" });
   });
 
-  // Serve frontend static files in production. The SPA shell (index.html) is
-  // served via a handler that injects the token as a meta tag so the same-origin
-  // UI can authenticate its write requests; static assets are served directly.
+  // Serve frontend static files in production. In default mode the SPA shell
+  // (index.html) is served via a handler that injects the auto-generated token
+  // as a meta tag so the same-origin UI authenticates its writes with no setup.
+  // In hardened mode (AEGIS_TOKEN set) the token is NOT injected; the UI prompts
+  // the operator for it. Static assets are served directly.
   const frontendDist = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "../../frontend/dist",
   );
-  const serveIndexWithToken = (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const serveIndex = (_req: express.Request, res: express.Response, next: express.NextFunction) => {
     let html: string;
     try {
       html = fs.readFileSync(path.join(frontendDist, "index.html"), "utf8");
     } catch {
       return next();
     }
-    const meta = `<meta name="aegis-token" content="${token}">`;
-    res.type("html").send(
-      html.includes("</head>") ? html.replace("</head>", `${meta}</head>`) : `${meta}${html}`,
-    );
+    if (injectToken) {
+      const meta = `<meta name="aegis-token" content="${token}">`;
+      html = html.includes("</head>") ? html.replace("</head>", `${meta}</head>`) : `${meta}${html}`;
+    }
+    res.type("html").send(html);
   };
   app.use(express.static(frontendDist, { index: false }));
   app.get("*", (req, res, next) => {
     if (req.path.startsWith(API_PREFIX)) return next();
-    return serveIndexWithToken(req, res, next);
+    return serveIndex(req, res, next);
   });
 
   // Error handler
