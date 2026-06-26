@@ -23,14 +23,16 @@ export type ServerOptions = {
 
 // Origins allowed to call the API from a browser. The bundled UI is served
 // same-origin, and the Vite dev server proxies /api, so only loopback origins
-// are needed by default. Extend with AEGIS_ALLOWED_ORIGINS (comma-separated).
+// are needed by default. Derived from the configured port (and port+1 for the
+// Vite dev server) so a custom AEGIS_PORT does not break the UI. Extend with
+// AEGIS_ALLOWED_ORIGINS (comma-separated).
 function resolveAllowedOrigins(): string[] {
-  const defaults = [
-    "http://localhost:3800",
-    "http://127.0.0.1:3800",
-    "http://localhost:3801",
-    "http://127.0.0.1:3801",
-  ];
+  const apiPort = parseInt(process.env.AEGIS_PORT ?? "3800", 10);
+  const devPort = apiPort + 1;
+  const defaults = [apiPort, devPort].flatMap((p) => [
+    `http://localhost:${p}`,
+    `http://127.0.0.1:${p}`,
+  ]);
   const extra = (process.env.AEGIS_ALLOWED_ORIGINS ?? "")
     .split(",")
     .map((value) => value.trim())
@@ -71,6 +73,15 @@ function resolveApiToken(configDir: string): { token: string; fromEnv: boolean }
 // agent-aegis-protected manifest through the WebUI. Read-only GETs stay open
 // so the UI loads without friction; cross-origin browser reads are already
 // blocked by the CORS allowlist. /health stays open for liveness checks.
+// Constant-time token comparison to avoid leaking the token via response timing.
+function tokensMatch(provided: string | undefined, expected: string): boolean {
+  if (!provided) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
 const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
 function createApiAccessGuard(token: string) {
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -81,7 +92,7 @@ function createApiAccessGuard(token: string) {
       req.get("x-aegis-token") ??
       (typeof req.query.token === "string" ? req.query.token : undefined) ??
       req.get("authorization")?.replace(/^Bearer\s+/i, "");
-    if (provided !== token) {
+    if (!tokensMatch(provided, token)) {
       return res.status(401).json({ ok: false, error: "Unauthorized" });
     }
     return next();
