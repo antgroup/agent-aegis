@@ -36,7 +36,8 @@ app.listen(finalPort, finalHost, () => {
   if (finalHost === "0.0.0.0") {
     console.warn(
       "[claw-aegis-web] WARNING: bound to 0.0.0.0 — the management API is reachable from the local network. " +
-        "Set AEGIS_HOST=127.0.0.1 to restrict, and set AEGIS_TOKEN to require authentication.",
+        "Set AEGIS_HOST=127.0.0.1 to restrict. On an exposed bind, provide AEGIS_TOKEN out-of-band " +
+        "(the auto-generated token is served to the UI and would be fetchable by network clients).",
     );
   }
   if (finalStateDir) {

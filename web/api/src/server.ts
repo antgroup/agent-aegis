@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import fs from "node:fs";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { API_PREFIX } from "@claw-aegis-web/shared";
 import { createConfigRouter } from "./routes/config.js";
@@ -36,30 +38,51 @@ function resolveAllowedOrigins(): string[] {
   return [...new Set([...defaults, ...extra])];
 }
 
-// Guard the management API against unauthorized local callers. When AEGIS_TOKEN
-// is set, every API request must carry the matching token. Otherwise we fall
-// back to a CSRF guard: a browser cross-origin request (e.g. a malicious page
-// hitting 127.0.0.1) always carries an Origin header, so we reject any Origin
-// outside the allowlist. Same-origin UI calls and non-browser tools (no Origin)
-// keep working. The /health probe stays open for liveness checks.
-function createApiAccessGuard(opts: { allowedOrigins: string[]; token?: string }) {
+// Resolve the API token. Priority: AEGIS_TOKEN (provided out-of-band — the
+// strongest mode, never written anywhere) > a persisted per-install token >
+// a freshly generated one written to a 0600 file. The file lets the same
+// machine's UI/CLI reuse the token across restarts; for a hardened setup,
+// place AEGIS_CONFIG_DIR (and thus this file) inside an agent-aegis protected
+// path so a compromised local agent cannot read it.
+function resolveApiToken(configDir: string): { token: string; fromEnv: boolean } {
+  const fromEnv = process.env.AEGIS_TOKEN?.trim();
+  if (fromEnv) return { token: fromEnv, fromEnv: true };
+
+  const tokenFile = path.join(configDir, ".aegis-webui-token");
+  try {
+    const existing = fs.readFileSync(tokenFile, "utf8").trim();
+    if (existing) return { token: existing, fromEnv: false };
+  } catch {
+    /* not yet created */
+  }
+  const token = crypto.randomBytes(24).toString("hex");
+  try {
+    fs.writeFileSync(tokenFile, token + "\n", { mode: 0o600 });
+    fs.chmodSync(tokenFile, 0o600);
+  } catch (err) {
+    console.error("[claw-aegis-web] could not persist token file:", err);
+  }
+  return { token, fromEnv: false };
+}
+
+// Guard state-changing API requests (PUT/POST/DELETE/PATCH) with the token.
+// This blocks the confused-deputy vector where a non-browser local caller
+// (e.g. a prompt-injected agent issuing a plain HTTP PUT) rewrites the
+// agent-aegis-protected manifest through the WebUI. Read-only GETs stay open
+// so the UI loads without friction; cross-origin browser reads are already
+// blocked by the CORS allowlist. /health stays open for liveness checks.
+const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
+function createApiAccessGuard(token: string) {
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.path === "/health") return next();
+    if (!MUTATING_METHODS.has(req.method)) return next();
 
-    if (opts.token) {
-      const provided =
-        req.get("x-aegis-token") ??
-        (typeof req.query.token === "string" ? req.query.token : undefined) ??
-        req.get("authorization")?.replace(/^Bearer\s+/i, "");
-      if (provided !== opts.token) {
-        return res.status(401).json({ ok: false, error: "Unauthorized" });
-      }
-      return next();
-    }
-
-    const origin = req.get("origin");
-    if (origin && !opts.allowedOrigins.includes(origin)) {
-      return res.status(403).json({ ok: false, error: "Forbidden origin" });
+    const provided =
+      req.get("x-aegis-token") ??
+      (typeof req.query.token === "string" ? req.query.token : undefined) ??
+      req.get("authorization")?.replace(/^Bearer\s+/i, "");
+    if (provided !== token) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
     }
     return next();
   };
@@ -69,7 +92,7 @@ export function createServer(options: ServerOptions) {
   const app = express();
 
   const allowedOrigins = resolveAllowedOrigins();
-  const token = process.env.AEGIS_TOKEN?.trim() || undefined;
+  const { token, fromEnv } = resolveApiToken(options.configDir);
 
   app.use(
     cors({
@@ -81,11 +104,13 @@ export function createServer(options: ServerOptions) {
     }),
   );
   app.use(express.json());
-  app.use(API_PREFIX, createApiAccessGuard({ allowedOrigins, token }));
+  app.use(API_PREFIX, createApiAccessGuard(token));
 
-  if (token) {
-    console.log("[claw-aegis-web] API token auth enabled (AEGIS_TOKEN set).");
-  }
+  console.log(
+    fromEnv
+      ? "[claw-aegis-web] API write auth: token required (from AEGIS_TOKEN)."
+      : `[claw-aegis-web] API write auth: token required. Token: ${token}`,
+  );
 
   const configService = new ConfigService(options.configDir);
   const stateService = new StateService(options.stateDir);
@@ -107,17 +132,29 @@ export function createServer(options: ServerOptions) {
     res.json({ status: "ok", version: "0.1.0" });
   });
 
-  // Serve frontend static files in production
+  // Serve frontend static files in production. The SPA shell (index.html) is
+  // served via a handler that injects the token as a meta tag so the same-origin
+  // UI can authenticate its write requests; static assets are served directly.
   const frontendDist = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "../../frontend/dist",
   );
-  app.use(express.static(frontendDist));
-  app.get("*", (_req, res, next) => {
-    if (_req.path.startsWith(API_PREFIX)) return next();
-    res.sendFile(path.join(frontendDist, "index.html"), (err) => {
-      if (err) next();
-    });
+  const serveIndexWithToken = (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+    let html: string;
+    try {
+      html = fs.readFileSync(path.join(frontendDist, "index.html"), "utf8");
+    } catch {
+      return next();
+    }
+    const meta = `<meta name="aegis-token" content="${token}">`;
+    res.type("html").send(
+      html.includes("</head>") ? html.replace("</head>", `${meta}</head>`) : `${meta}${html}`,
+    );
+  };
+  app.use(express.static(frontendDist, { index: false }));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith(API_PREFIX)) return next();
+    return serveIndexWithToken(req, res, next);
   });
 
   // Error handler

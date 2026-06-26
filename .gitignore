@@ -10,6 +10,9 @@ web/shared/dist/
 web/frontend/dist/
 web/shared/tsconfig.tsbuildinfo
 
+# WebUI runtime token (auto-generated per install)
+.aegis-webui-token
+
 # OS
 .DS_Store
 Thumbs.db

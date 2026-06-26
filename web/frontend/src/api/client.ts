@@ -3,9 +3,22 @@ import type { ApiResponse } from "@claw-aegis-web/shared";
 
 const BASE = API_PREFIX;
 
+// The server injects the API token into the served HTML as <meta name="aegis-token">.
+// It is required on write requests; we attach it to every request for simplicity.
+// In dev, the Vite proxy injects the header instead, so the meta may be absent.
+function authToken(): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  return document.querySelector('meta[name="aegis-token"]')?.getAttribute("content") ?? undefined;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = authToken();
   const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { "x-aegis-token": token } : {}),
+      ...init?.headers,
+    },
     ...init,
   });
   const json = (await res.json()) as ApiResponse<T>;
