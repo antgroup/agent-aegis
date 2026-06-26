@@ -161,6 +161,16 @@ For development mode with hot-reload:
 npm run dev
 ```
 
+### Security & Access Control
+
+The management API binds to `127.0.0.1` by default (not exposed to the LAN/internet) and only allows same-host browser origins via a CORS allowlist. State-changing requests (`PUT`/`POST`/`DELETE`) require a token; read-only `GET`s stay open so the UI loads without setup.
+
+- **Default mode** — a token is auto-generated, written to `AEGIS_CONFIG_DIR/.aegis-webui-token` (mode `0600`) and printed to the console. The bundled UI injects it automatically, so just opening the page works. Note: because the token is served in the page, an attacker with local code execution (e.g. a prompt-injected agent doing `GET /`) could read it — default mode does not defend against that.
+- **Hardened mode** — set `AEGIS_TOKEN` out-of-band. The token is then **never served to the page**; the UI prompts you to enter it once (stored in `localStorage`). Combine this with placing `AEGIS_CONFIG_DIR` in an agent-aegis-protected path so a local agent cannot read the token file either.
+- Use `AEGIS_HOST` / `--host` to change the bind address (pair `0.0.0.0` with `AEGIS_TOKEN`).
+
+See [`web/README.md`](web/README.md) for the full environment-variable reference.
+
 ### Feature Pages
 
 **Dashboard** — Defense status overview, 12-defense status matrix, self-integrity status, Trusted Skills count, and recent security events.
