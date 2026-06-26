@@ -158,6 +158,17 @@ npm start
 npm run dev
 ```
 
+### 安全与访问控制
+
+管理 API 默认绑定 `127.0.0.1`（不对局域网/公网暴露），并通过 CORS 白名单仅放行本机浏览器 Origin。**所有 API 请求（读和写）都需要 token**，仅 `/health` 开放。
+
+- **Token** — 启动时自动生成 token，**打印到控制台**,并写入 `AEGIS_CONFIG_DIR/.aegis-webui-token`（权限 `0600`）；也可用 `AEGIS_TOKEN` 自行指定。请保存好。
+- **如何输入** — token **从不嵌入页面**。打开 WebUI 时会弹窗要求粘贴一次（存于 `localStorage`）。因为 token 从不随 HTML 下发，**已取得本机代码执行能力的攻击者**（如被注入的 agent 通过 `GET /` 读取页面）也拿不到它。如需更彻底，可将 `AEGIS_CONFIG_DIR` 指向 agent-aegis 受保护路径，使本机 agent 连 token 文件也读不到。
+- 开发模式（`npm run dev`）由 Vite 代理自动注入 token，无需手动输入。
+- 用 `AEGIS_HOST` / `--host` 修改绑定地址（`0.0.0.0` 须配合 `AEGIS_TOKEN`）。
+
+完整环境变量说明见 [`web/README.md`](web/README.md)。
+
 ### 功能页面
 
 **Dashboard（仪表盘）** — 防御状态统计卡片、12项防御机制状态矩阵、插件自完整性状态、Trusted Skills计数、最近安全事件列表。
