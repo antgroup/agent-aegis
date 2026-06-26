@@ -67,12 +67,6 @@ function resolveApiToken(configDir: string): { token: string; fromEnv: boolean }
   return { token, fromEnv: false };
 }
 
-// Guard state-changing API requests (PUT/POST/DELETE/PATCH) with the token.
-// This blocks the confused-deputy vector where a non-browser local caller
-// (e.g. a prompt-injected agent issuing a plain HTTP PUT) rewrites the
-// agent-aegis-protected manifest through the WebUI. Read-only GETs stay open
-// so the UI loads without friction; cross-origin browser reads are already
-// blocked by the CORS allowlist. /health stays open for liveness checks.
 // Constant-time token comparison to avoid leaking the token via response timing.
 function tokensMatch(provided: string | undefined, expected: string): boolean {
   if (!provided) return false;
@@ -82,11 +76,14 @@ function tokensMatch(provided: string | undefined, expected: string): boolean {
   return crypto.timingSafeEqual(a, b);
 }
 
-const MUTATING_METHODS = new Set(["POST", "PUT", "DELETE", "PATCH"]);
+// Require the token on every API request (reads and writes alike); only the
+// /health liveness probe is open. The token is never embedded in the served
+// page, so the operator must enter it to use the UI — this denies it to a local
+// caller (e.g. a prompt-injected agent) that could otherwise read it from the
+// HTML and drive the management API through the WebUI.
 function createApiAccessGuard(token: string) {
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.path === "/health") return next();
-    if (!MUTATING_METHODS.has(req.method)) return next();
 
     const provided =
       req.get("x-aegis-token") ??
@@ -117,17 +114,16 @@ export function createServer(options: ServerOptions) {
   app.use(express.json());
   app.use(API_PREFIX, createApiAccessGuard(token));
 
-  // Hardened mode: when the token is provided out-of-band via AEGIS_TOKEN we do
-  // NOT serve it to clients (see serveIndex below) so a local agent cannot read
-  // it from the page. The operator enters it into the UI once. In default mode
-  // the auto-generated token is injected for zero-friction local use.
-  const injectToken = !fromEnv;
-  console.log(
-    fromEnv
-      ? "[claw-aegis-web] API write auth: token required (from AEGIS_TOKEN). " +
-          "Token is NOT served to the UI; enter it in the UI when prompted."
-      : `[claw-aegis-web] API write auth: token required. Token: ${token}`,
-  );
+  // The token is never served to the page (see serveIndex). The operator copies
+  // it from here (or sets it via AEGIS_TOKEN) and enters it into the UI once.
+  if (fromEnv) {
+    console.log(
+      "[claw-aegis-web] API auth enabled (from AEGIS_TOKEN). Enter your token in the WebUI to access the panel.",
+    );
+  } else {
+    console.log("[claw-aegis-web] API auth enabled. Save this token — you must enter it in the WebUI:");
+    console.log(`\n    ${token}\n`);
+  }
 
   const configService = new ConfigService(options.configDir);
   const stateService = new StateService(options.stateDir);
@@ -149,32 +145,18 @@ export function createServer(options: ServerOptions) {
     res.json({ status: "ok", version: "0.1.0" });
   });
 
-  // Serve frontend static files in production. In default mode the SPA shell
-  // (index.html) is served via a handler that injects the auto-generated token
-  // as a meta tag so the same-origin UI authenticates its writes with no setup.
-  // In hardened mode (AEGIS_TOKEN set) the token is NOT injected; the UI prompts
-  // the operator for it. Static assets are served directly.
+  // Serve frontend static files in production. The token is intentionally NOT
+  // embedded in the page; the UI prompts the operator to enter it on first use.
   const frontendDist = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "../../frontend/dist",
   );
-  const serveIndex = (_req: express.Request, res: express.Response, next: express.NextFunction) => {
-    let html: string;
-    try {
-      html = fs.readFileSync(path.join(frontendDist, "index.html"), "utf8");
-    } catch {
-      return next();
-    }
-    if (injectToken) {
-      const meta = `<meta name="aegis-token" content="${token}">`;
-      html = html.includes("</head>") ? html.replace("</head>", `${meta}</head>`) : `${meta}${html}`;
-    }
-    res.type("html").send(html);
-  };
   app.use(express.static(frontendDist, { index: false }));
   app.get("*", (req, res, next) => {
     if (req.path.startsWith(API_PREFIX)) return next();
-    return serveIndex(req, res, next);
+    res.sendFile(path.join(frontendDist, "index.html"), (err) => {
+      if (err) next();
+    });
   });
 
   // Error handler

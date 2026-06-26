@@ -5,16 +5,11 @@ const BASE = API_PREFIX;
 
 const TOKEN_STORAGE_KEY = "aegis-token";
 
-// Default mode: the server injects the token into the served HTML as
-// <meta name="aegis-token"> and we use it transparently. Hardened mode
-// (AEGIS_TOKEN set): the token is NOT served, so we fall back to one the
-// operator entered (persisted in localStorage), prompting once on a 401.
-// In dev, the Vite proxy injects the header, so neither may be present.
-function authToken(): string | undefined {
-  if (typeof document !== "undefined") {
-    const meta = document.querySelector('meta[name="aegis-token"]')?.getAttribute("content");
-    if (meta) return meta;
-  }
+// The token is never embedded in the page. The operator enters it once (it is
+// shown in the server console / .aegis-webui-token, or set via AEGIS_TOKEN) and
+// it is persisted in localStorage. In dev the Vite proxy injects the header, so
+// no entry is needed there.
+function storedToken(): string | undefined {
   try {
     return localStorage.getItem(TOKEN_STORAGE_KEY) ?? undefined;
   } catch {
@@ -22,8 +17,36 @@ function authToken(): string | undefined {
   }
 }
 
+// Single-flight prompt so concurrent 401s (multiple queries on first load) only
+// open one dialog.
+let tokenPrompt: Promise<string | undefined> | null = null;
+function promptForToken(): Promise<string | undefined> {
+  if (typeof window === "undefined") return Promise.resolve(undefined);
+  if (!tokenPrompt) {
+    tokenPrompt = Promise.resolve()
+      .then(() => {
+        const entered = window
+          .prompt("Enter the Agent Aegis WebUI token (shown in the server console / .aegis-webui-token):")
+          ?.trim();
+        if (entered) {
+          try {
+            localStorage.setItem(TOKEN_STORAGE_KEY, entered);
+          } catch {
+            /* storage unavailable; will re-prompt next time */
+          }
+          return entered;
+        }
+        return undefined;
+      })
+      .finally(() => {
+        tokenPrompt = null;
+      });
+  }
+  return tokenPrompt;
+}
+
 async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
-  const token = authToken();
+  const token = storedToken();
   const res = await fetch(`${BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
@@ -33,18 +56,17 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
     ...init,
   });
 
-  if (res.status === 401 && !retried && typeof window !== "undefined") {
-    const entered = window.prompt(
-      "This action requires the Agent Aegis API token.\n" +
-        "Find it in the server console log or the .aegis-webui-token file (or your AEGIS_TOKEN value):",
-    );
-    if (entered?.trim()) {
+  if (res.status === 401) {
+    if (!retried) {
+      const entered = await promptForToken();
+      if (entered) return request<T>(path, init, true);
+    } else {
+      // The entered token was rejected; clear it so the next action re-prompts.
       try {
-        localStorage.setItem(TOKEN_STORAGE_KEY, entered.trim());
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
       } catch {
-        /* storage unavailable; will re-prompt next time */
+        /* ignore */
       }
-      return request<T>(path, init, true);
     }
   }
 
