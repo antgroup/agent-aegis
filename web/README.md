@@ -163,14 +163,26 @@ AgentAegis 的防御参数存储在 `openclaw.plugin.json` 的 `userConfig` 字�
 | 环境变量 | 说明 | 默认值 |
 |----------|------|--------|
 | `AEGIS_PORT` | API 服务端口 | `3800` |
+| `AEGIS_HOST` | 监听地址。默认仅本机回环，**不对局域网/公网暴露**；如需远程访问设为 `0.0.0.0` 并务必配合 `AEGIS_TOKEN` | `127.0.0.1` |
+| `AEGIS_TOKEN` | API 鉴权 token。设置后从环境带外提供（不落盘）；不设置则自动生成并打印到控制台、写入 `.aegis-webui-token` | 空（自动生成） |
+| `AEGIS_ALLOWED_ORIGINS` | 额外允许的浏览器跨域 Origin（逗号分隔），追加到默认的本机白名单 | 空 |
 | `AEGIS_CONFIG_DIR` | `openclaw.plugin.json` 所在目录 | 当前工作目录 |
 | `AEGIS_STATE_DIR` | 插件状态目录（trusted-skills.json 等） | 空（不读取状态文件） |
 
 命令行参数形式：
 
 ```bash
-npm start -- --port=3800 --config-dir=/path/to/plugin --state-dir=~/.openclaw/plugins/agent-aegis
+npm start -- --port=3800 --host=127.0.0.1 --config-dir=/path/to/plugin --state-dir=~/.openclaw/plugins/agent-aegis
 ```
+
+> **安全说明**
+>
+> - **绑定**：管理 API 默认绑定 `127.0.0.1`，不对局域网/公网暴露。
+> - **CORS**：仅放行本机白名单 Origin，不再返回 `*`。
+> - **Token 鉴权（读写都需要）**：除 `/health` 外，所有 API 请求都必须携带 token（`x-aegis-token` 头、`Authorization: Bearer` 或 `?token=`）。token 默认自动生成、**打印到控制台**并写入 `AEGIS_CONFIG_DIR/.aegis-webui-token`（权限 `0600`），也可用 `AEGIS_TOKEN` 自行指定。
+> - **token 不会嵌入页面**：打开 WebUI 后，首次访问会**弹窗要求输入 token**（从控制台或 `.aegis-webui-token` 复制），输入后存于浏览器 localStorage。因为 token 从不随页面 HTML 下发，**已取得本机代码执行能力的攻击者（如被注入的 agent）无法通过 `GET /` 从页面读取 token**。
+> - 这关闭了「本地调用者经 WebUI 绕过 agent-aegis 清单保护」的混淆代理向量。如需更彻底，可将 `AEGIS_CONFIG_DIR` 指向 agent-aegis 受保护路径，使 agent 也读不到 `.aegis-webui-token` 文件。
+> - 开发模式（`npm run dev`）下 Vite 代理会自动注入 token 头，无需手动输入。
 
 ## 配置读写机制
 
