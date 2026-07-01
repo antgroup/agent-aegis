@@ -15,6 +15,9 @@ web/frontend/dist/
 __pycache__/
 *.pyc
 
+# WebUI runtime token (auto-generated per install)
+.aegis-webui-token
+
 # Lockfiles (regenerated on install)
 package-lock.json
 
