@@ -19,6 +19,9 @@ __pycache__/
 # are not in the npm files whitelist, so keep them out of git.
 sentinel/**/*.d.ts
 
+# WebUI runtime token (auto-generated per install)
+.aegis-webui-token
+
 # Lockfiles (regenerated on install)
 package-lock.json
 
