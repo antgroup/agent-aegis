@@ -24,6 +24,21 @@ export function useResetConfig() {
   });
 }
 
+export function useSentinelConfig() {
+  return useQuery({
+    queryKey: ["sentinel-config"],
+    queryFn: api.getSentinelConfig,
+  });
+}
+
+export function useUpdateSentinelConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.updateSentinelConfig,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["sentinel-config"] }),
+  });
+}
+
 export function useStatus() {
   return useQuery({
     queryKey: ["status"],

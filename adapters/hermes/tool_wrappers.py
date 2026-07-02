@@ -8,6 +8,7 @@ that consult the AgentAegis RPC engine before executing.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, Callable, Dict, Optional
@@ -73,15 +74,21 @@ def _make_safe_handler(
         return original_handler(args, **kwargs)
 
     async def async_handler(args: dict, **kwargs: Any) -> str:
-        # Same logic but for async handlers — the check itself is sync
-        # (short RPC call), only the original handler is awaited
+        # The check is a blocking, synchronous RPC (writes stdin and waits on
+        # the subprocess's stdout). Off-load it to a worker thread via
+        # asyncio.to_thread so it never blocks the agent's event loop. The
+        # bridge serialises calls with its own lock, so this is safe.
         try:
-            result = engine.call("check_before_tool", {
-                "tool": tool_name,
-                "args": args,
-                "sessionKey": session_key_fn(),
-                "runId": run_id_fn(),
-            })
+            result = await asyncio.to_thread(
+                engine.call,
+                "check_before_tool",
+                {
+                    "tool": tool_name,
+                    "args": args,
+                    "sessionKey": session_key_fn(),
+                    "runId": run_id_fn(),
+                },
+            )
         except Exception as exc:
             logger.warning("AgentAegis check failed for %s, allowing: %s", tool_name, exc)
             return await original_handler(args, **kwargs)

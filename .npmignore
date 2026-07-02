@@ -16,3 +16,11 @@ web/api-hermes/
 web/frontend/
 web/shared/
 !web/api/dist
+
+# Kernel probes spawn child processes (node:child_process), which the OpenClaw
+# plugin scanner blocks. They are NOT bundled in the OpenClaw plugin — run them
+# standalone (see README "Standalone eBPF launch"). The authoritative exclusion
+# is the package.json "files" allowlist; these entries are a defensive belt.
+sentinel/probes/ebpf/
+sentinel/probes/uprobe/
+sentinel/probes/lsm/

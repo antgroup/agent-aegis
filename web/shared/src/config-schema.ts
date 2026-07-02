@@ -176,3 +176,49 @@ export const DEFENSE_GROUPS: DefenseGroupMeta[] = [
     modeKey: "dispatchGuardMode",
   },
 ];
+
+// ---- Sentinel (L2/L3 kernel defense) config — a SEPARATE per-agent file ----
+// Independent of the L1 config above; lives in each agent's sentinel sidecar
+// install dir (e.g. ~/.openclaw/agent-aegis-sentinel/config.json).
+
+const sentinelModeSchema = z.enum(["observe", "enforce"]);
+const minSeveritySchema = z.enum(["high", "critical"]);
+
+export const sentinelConfigSchema = z.object({
+  stateDir: z.string().optional(),
+  nativeJudge: z
+    .object({
+      mode: sentinelModeSchema.optional(),
+      sensitivePaths: z.array(z.string()).optional(),
+      scratchDirs: z.array(z.string()).optional(),
+    })
+    .optional(),
+  probes: z
+    .object({
+      ebpf: z.object({ enabled: z.boolean().optional() }).optional(),
+      uprobe: z.object({ enabled: z.boolean().optional() }).optional(),
+      lsm: z
+        .object({
+          enabled: z.boolean().optional(),
+          minSeverity: minSeveritySchema.optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
+export type SentinelConfigPartial = z.infer<typeof sentinelConfigSchema>;
+
+export const SENTINEL_CONFIG_DEFAULTS = {
+  stateDir: "",
+  nativeJudge: {
+    mode: "observe" as const,
+    sensitivePaths: [] as string[],
+    scratchDirs: [] as string[],
+  },
+  probes: {
+    ebpf: { enabled: false },
+    uprobe: { enabled: false },
+    lsm: { enabled: false, minSeverity: "high" as const },
+  },
+};

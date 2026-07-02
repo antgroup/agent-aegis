@@ -109,7 +109,7 @@ def _load_config() -> dict:
         return {}
 
     try:
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         return data if isinstance(data, dict) else {}
     except Exception as exc:
@@ -127,7 +127,7 @@ def _check_hermes_config() -> dict:
     if hermes_config_path.is_file():
         try:
             import yaml
-            with open(hermes_config_path) as f:
+            with open(hermes_config_path, encoding="utf-8") as f:
                 hermes_config = yaml.safe_load(f) or {}
 
             approvals = hermes_config.get("approvals", {})

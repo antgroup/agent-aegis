@@ -41,6 +41,29 @@ export type ConfigResponse = {
 
 export type ConfigUpdateRequest = Partial<AegisConfig>;
 
+// ---- Sentinel (L2/L3 kernel defense) config ----
+
+export type SentinelConfig = {
+  stateDir: string;
+  nativeJudge: {
+    mode: "observe" | "enforce";
+    sensitivePaths: string[];
+    scratchDirs: string[];
+  };
+  probes: {
+    ebpf: { enabled: boolean };
+    uprobe: { enabled: boolean };
+    lsm: { enabled: boolean; minSeverity: "high" | "critical" };
+  };
+};
+
+export type SentinelConfigResponse = {
+  config: SentinelConfig;
+  defaults: SentinelConfig;
+};
+
+export type SentinelConfigUpdateRequest = Partial<SentinelConfig>;
+
 // ---- Status ----
 
 export type DefenseStatusEntry = {

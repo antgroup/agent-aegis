@@ -107,19 +107,24 @@ class AegisWebServer:
             )
             self._started = True
 
-            # Background thread to drain stderr and forward to Python logging
+            # Check whether the process survived startup BEFORE any drain thread
+            # touches stderr — otherwise the drain thread and communicate() would
+            # race on the same pipe and swallow the real error. On failure,
+            # communicate() returns BOTH streams for a useful diagnostic.
+            time.sleep(0.5)
+            if self._proc.poll() is not None:
+                stdout, stderr = self._proc.communicate(timeout=1)
+                logger.error(
+                    "Web server failed to start: stdout=%s stderr=%s", stdout, stderr
+                )
+                self._started = False
+                raise RuntimeError("Web server process exited immediately")
+
+            # Process is alive — now it is safe to drain stderr in the background.
             self._stderr_thread = threading.Thread(
                 target=self._drain_stderr, daemon=True,
             )
             self._stderr_thread.start()
-
-            # Wait a moment and check if process started successfully
-            time.sleep(0.5)
-            if self._proc.poll() is not None:
-                stdout, _ = self._proc.communicate(timeout=1)
-                logger.error("Web server failed to start: %s", stdout)
-                self._started = False
-                raise RuntimeError("Web server process exited immediately")
 
             logger.info(
                 "AgentAegis Web API started at http://localhost:%d",

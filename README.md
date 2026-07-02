@@ -59,6 +59,12 @@ npm install && npm run build
 openclaw plugins install ./AgentAegis
 ```
 
+> ℹ️ The kernel probes (`sentinel/probes/{ebpf,uprobe,lsm}`) are **not** part of this
+> package — they need root and spawn helpers via `node:child_process`, which
+> OpenClaw's plugin scanner blocks. The L1 tool-call defenses install and run
+> normally; the kernel layer (L2/L3) installs separately as a **per-agent sidecar**
+> (see *Kernel-Level Defense → Enable* below).
+
 **3.** Trust it and restart the gateway so it loads. Add `agent-aegis` to `plugins.allow` in `~/.openclaw/openclaw.json`, then verify:
 
 ```bash
@@ -190,22 +196,32 @@ AgentAegis/
 │   ├── config.ts               # Configuration resolution and constants
 │   └── types.ts                # Core domain types (TurnSecurityState, etc.)
 │
-├── adapters/hermes/            # Hermes Agent adapter (Python ↔ Node bridge)
-│   ├── __init__.py             # Plugin register() — wires hooks + wraps tools
-│   ├── bridge.py               # Spawns rpc-server.js; JSON-RPC over stdio
-│   ├── tool_wrappers.py        # Wraps high-risk tools for in-flight blocking
-│   ├── paths.py                # Resolves plugin / state / config paths
-│   ├── web-server.py           # Manages the WebUI subprocess
-│   ├── install.sh              # Automated Hermes installer
-│   ├── plugin.yaml             # Hermes manifest
-│   └── config.yaml             # Default defense config template
+├── adapters/                   # Per-runtime adapters & installers
+│   ├── install-sentinel.sh     # Per-agent L2/L3 sidecar installer (openclaw | hermes)
+│   └── hermes/                 # Hermes Agent adapter (Python ↔ Node bridge)
+│       ├── __init__.py         # Plugin register() — wires hooks + wraps tools
+│       ├── bridge.py           # Spawns rpc-server.js; JSON-RPC over stdio
+│       ├── tool_wrappers.py    # Wraps high-risk tools for in-flight blocking
+│       ├── paths.py            # Resolves plugin / state / config paths
+│       ├── web-server.py       # Manages the WebUI subprocess
+│       ├── install.sh          # Automated Hermes (L1) installer
+│       ├── plugin.yaml         # Hermes manifest
+│       └── config.yaml         # Default defense config template
+│
+├── sentinel/                   # Framework-agnostic L2/L3 kernel-defense subsystem
+│   ├── channel/                # Probe events + append-only JSONL store + pub-sub
+│   ├── judges/                 # Decision logic (native judge: sensitive-path / kernel-escape)
+│   ├── probes/                 # Syscall sources — ebpf/ (tracepoint), uprobe/ (libc), lsm/ (enforce)
+│   ├── runtime/                # Agent-framework abstraction (noop / openclaw / hermes adapters)
+│   ├── sidecar/                # Per-agent standalone runner (run.mjs + config.example.json)
+│   ├── bootstrap.ts            # Wires probes + judges from config
+│   └── index.ts                # startSentinel(runtime) + SentinelHandle
 │
 ├── web/                        # WebUI management panel
 │   ├── shared/                 # Shared types, Zod schemas, defense group metadata
-│   ├── api/                    # Express backend (routes: config / status / events / skills)
+│   ├── api/                    # Express backend (routes: config / sentinel-config / status / events / skills)
 │   └── frontend/               # React + Vite + TailwindCSS frontend (Dashboard, Config, Events, Skills)
 │
-├── sentinel/                   # (Experimental) kernel-level eBPF/LSM probe runner
 └── docs/                       # WebUI screenshots
 ```
 
@@ -237,50 +253,74 @@ verdict is persisted as JSONL and forwarded to the **WebUI Events page**.
   intercept (the operation runs). Safe for rollout / data collection.
 - **enforce** — the `lsm` probe denies high-severity syscalls in-kernel.
 
-### Enable — OpenClaw and Hermes
+### Enable — per-agent sidecar (recommended)
 
-Kernel probes are **opt-in** (Linux only). The **same** sentinel subsystem runs
-on both runtimes — OpenClaw starts it from the native plugin, Hermes from the
-Node RPC server the Python plugin spawns — so the config keys are identical.
+Because eBPF needs **root** and OpenClaw's plugin scanner blocks
+`child_process`, the kernel probes can't live inside the installed L1 plugin.
+They ship instead as a **per-agent sidecar**: each agent gets its OWN install
+dir, OWN config, OWN launcher, and its events flow into THAT agent's state dir —
+so OpenClaw's and Hermes's kernel defense stay as independent as their L1
+defenses already are.
 
-**OpenClaw** — edit `openclaw.plugin.json` `userConfig` (or the WebUI Config page),
-then restart the gateway:
+```bash
+# install the L2/L3 sidecar for a runtime (builds sentinel/ if needed)
+bash adapters/install-sentinel.sh openclaw   # -> ~/.openclaw/agent-aegis-sentinel/
+bash adapters/install-sentinel.sh hermes     # -> ~/.hermes/agent-aegis-sentinel/
+```
+
+Each install gets `sentinel/` (the subsystem), `config.json` (this agent's
+dedicated L2/L3 config, with `stateDir` pre-pointed at that agent's events dir so
+L1 + L2/L3 events show together), and `start-sentinel.sh`. Launch it as root:
+
+```bash
+sudo bash ~/.openclaw/agent-aegis-sentinel/start-sentinel.sh
+```
+
+Configure it by editing `<install>/config.json`, or visually from the **WebUI
+Config page → Kernel Defense (L2/L3)** section (it reads/writes this exact file
+via `GET/PUT /api/v1/sentinel-config`):
 
 ```json
 {
-  "userConfig": {
-    "nativeJudge": { "mode": "observe" },
-    "probes": {
-      "ebpf": { "enabled": true },
-      "lsm":  { "enabled": false, "minSeverity": "high" }
-    }
-  }
+  "stateDir": "/root/.openclaw/plugins/agent-aegis",
+  "nativeJudge": { "mode": "observe", "sensitivePaths": ["/etc/shadow"], "scratchDirs": [] },
+  "probes": { "ebpf": { "enabled": true }, "uprobe": { "enabled": false }, "lsm": { "enabled": false, "minSeverity": "high" } }
 }
 ```
 
-**Hermes** — edit `~/.hermes/plugins/agent-aegis/config.yaml` (the installer ships
-this block, disabled), then restart Hermes:
-
-```yaml
-nativeJudge:
-  mode: observe
-probes:
-  ebpf:
-    enabled: true
-  lsm:
-    enabled: false
-    minSeverity: high
-```
-
 For active in-kernel blocking set `nativeJudge.mode: enforce` **and**
-`probes.lsm.enabled: true` (the `ebpf` tracepoint probe is observe-only; `lsm`
+`probes.lsm.enabled: true` (the `ebpf`/`uprobe` probes are observe-only; `lsm`
 is what blocks in-kernel). Extend coverage without code via
-`nativeJudge.sensitivePaths` / `nativeJudge.scratchDirs`.
+`nativeJudge.sensitivePaths` / `nativeJudge.scratchDirs`. Changes apply on the
+**next sidecar restart** (no hot reload) — see `sentinel/sidecar/README.md`.
 
-**Requirements (both):** a Linux kernel with eBPF, root, BCC (`bpfcc-tools`,
+> Hermes can alternatively enable the same probes in-process from its plugin
+> `config.yaml` (`nativeJudge` / `probes` block, shipped disabled) instead of
+> running the sidecar — but the sidecar is the recommended per-agent path for
+> both runtimes.
+
+**Requirements:** a Linux kernel with eBPF, root, BCC (`bpfcc-tools`,
 `python3-bpfcc`), and `/sys/kernel/debug` mounted. On macOS/Windows use the
 Docker harnesses below (privileged Linux container via OrbStack / Docker Desktop).
 Probes fail-open — if they can't attach, it's logged and the agent keeps running.
+
+### Standalone eBPF launch (any runtime, incl. OpenClaw)
+
+The probes are decoupled from the plugin — run them straight from the cloned repo,
+no agent required. Three levels, simplest first:
+
+```bash
+# L0 — raw probe (Linux + root + BCC): syscalls as JSONL on stdout
+sudo python3 sentinel/probes/ebpf/runner/probe.py --targets execve,openat,connect
+#   then, in another shell: cat /etc/shadow ; ls /etc
+#   → {"kind":"ready",...} then {"kind":"syscall","syscall":"openat","path":"/etc/shadow",...}
+
+# L1 — full pipeline (probe → native judge → verdict), no Docker (Linux + root)
+npm run build && sudo node sentinel/probes/ebpf/verify-e2e.mjs   # PASS = cat /etc/shadow → BLOCK
+```
+
+For a containerized run that works on any OS (macOS/Windows via OrbStack / Docker
+Desktop), use the one-command harnesses in **Verify** below.
 
 ### Verify (one command, any OS with Docker)
 
@@ -338,7 +378,7 @@ See [`web/README.md`](web/README.md) for the full environment-variable reference
   <img src="docs/webui-dashboard-en.png" alt="WebUI Dashboard" width="90%" />
 </p>
 
-**Config** — Master controls (global toggle + default blocking mode), per-defense cards, Protected Assets tag editor, and Advanced options. Supports dirty-state tracking with Save / Reset to Defaults.
+**Config** — Master controls (global toggle + default blocking mode), per-defense cards, Protected Assets tag editor, a **Kernel Defense (L2/L3)** section that edits this agent's sidecar config, and Advanced options. Supports dirty-state tracking with Save / Reset to Defaults.
 
 <p align="center">
   <img src="docs/webui-config-en.png" alt="WebUI Config" width="90%" />

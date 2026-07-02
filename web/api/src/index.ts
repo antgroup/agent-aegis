@@ -25,6 +25,11 @@ const defaultStateDir = pluginRoot.includes(path.join(".openclaw", "extensions")
     ? path.resolve(pluginRoot, "..", "..", "agent-aegis-state")
     : "";
 const stateDir = expandHome(process.env.AEGIS_STATE_DIR ?? defaultStateDir);
+// L2/L3 sentinel sidecar config — a SEPARATE per-agent file. Default by runtime.
+const defaultSentinelConfig =
+  (process.env.AEGIS_APP ?? "openclaw") === "hermes"
+    ? "~/.hermes/agent-aegis-sentinel/config.json"
+    : "~/.openclaw/agent-aegis-sentinel/config.json";
 
 for (const arg of process.argv.slice(2)) {
   const [key, value] = arg.split("=");
@@ -32,16 +37,19 @@ for (const arg of process.argv.slice(2)) {
   if (key === "--host" && value) Object.assign(process.env, { AEGIS_HOST: value });
   if (key === "--config-dir" && value) Object.assign(process.env, { AEGIS_CONFIG_DIR: value });
   if (key === "--state-dir" && value) Object.assign(process.env, { AEGIS_STATE_DIR: value });
+  if (key === "--sentinel-config" && value) Object.assign(process.env, { AEGIS_SENTINEL_CONFIG: value });
 }
 
 const finalPort = parseInt(process.env.AEGIS_PORT ?? String(port), 10);
 const finalHost = process.env.AEGIS_HOST ?? host;
 const finalConfigDir = process.env.AEGIS_CONFIG_DIR ?? configDir;
 const finalStateDir = process.env.AEGIS_STATE_DIR ?? stateDir;
+const finalSentinelConfigPath = expandHome(process.env.AEGIS_SENTINEL_CONFIG ?? defaultSentinelConfig);
 
 const { app } = createServer({
     configDir: finalConfigDir,
-    stateDir: finalStateDir
+    stateDir: finalStateDir,
+    sentinelConfigPath: finalSentinelConfigPath
 });
 
 app.listen(finalPort, finalHost, () => {
@@ -58,4 +66,5 @@ app.listen(finalPort, finalHost, () => {
     console.log(`[agent-aegis-web] State dir: ${finalStateDir}`);
   }
   console.log(`[agent-aegis-web] Config dir: ${finalConfigDir}`);
+  console.log(`[agent-aegis-web] Sentinel config: ${finalSentinelConfigPath}`);
 });

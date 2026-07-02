@@ -1,0 +1,16 @@
+{
+  "//": "Per-agent sentinel (L2/L3) config — independent of the L1 plugin config. The installer (adapters/install-sentinel.sh) fills stateDir with the agent's own events dir so L1 + L2/L3 show up in THAT agent's WebUI.",
+  "stateDir": "",
+  "nativeJudge": {
+    "//": "mode: observe = detect+log+WebUI, never block | enforce = let lsm deny in-kernel",
+    "mode": "observe",
+    "sensitivePaths": ["/etc/shadow"],
+    "scratchDirs": []
+  },
+  "probes": {
+    "//": "ebpf/uprobe = observe only; lsm = in-kernel enforce (needs kernel >=5.7 + BTF + bpf in LSM list, and nativeJudge.mode=enforce)",
+    "ebpf": { "enabled": true, "pythonBin": "/usr/bin/python3" },
+    "uprobe": { "enabled": false },
+    "lsm": { "enabled": false, "minSeverity": "high" }
+  }
+}
