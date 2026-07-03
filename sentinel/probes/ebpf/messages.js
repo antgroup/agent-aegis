@@ -22,6 +22,8 @@ export function parseEbpfMessage(line) {
             return parseReady(r);
         case "syscall":
             return parseSyscall(r);
+        case "lifecycle":
+            return parseLifecycle(r);
         case "log":
             return parseLog(r);
         default:
@@ -64,6 +66,34 @@ function parseSyscall(r) {
     if (r.extra && typeof r.extra === "object" && !Array.isArray(r.extra)) {
         out.extra = r.extra;
     }
+    return out;
+}
+function parseLifecycle(r) {
+    const event = r.event;
+    if (event !== "fork" && event !== "exec" && event !== "exit")
+        return null;
+    const pid = typeof r.pid === "number" ? r.pid : 0;
+    const ts = typeof r.ts === "number" ? r.ts : Date.now();
+    const out = { kind: "lifecycle", event, pid, ts };
+    if (typeof r.ppid === "number")
+        out.ppid = r.ppid;
+    if (typeof r.comm === "string")
+        out.comm = r.comm;
+    if (typeof r.childPid === "number")
+        out.childPid = r.childPid;
+    if (typeof r.path === "string")
+        out.path = r.path;
+    if (Array.isArray(r.argv) && r.argv.every((s) => typeof s === "string")) {
+        out.argv = r.argv;
+    }
+    if (typeof r.exitCode === "number")
+        out.exitCode = r.exitCode;
+    const proc = narrowProc(r.proc);
+    if (proc)
+        out.proc = proc;
+    const container = narrowContainer(r.container);
+    if (container)
+        out.container = container;
     return out;
 }
 // --- defensive field narrowers for the v2 enrichment objects -----------------

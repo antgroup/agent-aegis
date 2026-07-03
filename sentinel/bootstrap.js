@@ -25,7 +25,26 @@ async function loadProbeFactory(specifier, exportName, logger) {
  * logged, never thrown — sentinel keeps running with the rest.
  */
 export async function startSentinelRuntime(runtime, engine, opts) {
-    const sentinel = startSentinel(runtime, opts);
+    // Read eventQueue and attribution config and merge into opts
+    let eventQueueCfg;
+    let attributionCfg;
+    let contextBufferCfg;
+    try {
+        const config = await runtime.readConfig();
+        eventQueueCfg = readEventQueueConfig(config);
+        attributionCfg = readAttributionConfig(config);
+        contextBufferCfg = readContextConfig(config);
+    }
+    catch {
+        // Config read is optional; defaults will apply.
+    }
+    const sentinelOpts = {
+        ...opts,
+        eventQueue: eventQueueCfg ?? opts?.eventQueue,
+        attribution: attributionCfg ?? opts?.attribution,
+        context: { buffer: contextBufferCfg ?? opts?.context?.buffer },
+    };
+    const sentinel = startSentinel(runtime, sentinelOpts);
     sentinel.registerJudge(createL1BridgeJudge(engine));
     let nativeCfg = {};
     try {
@@ -50,6 +69,7 @@ export async function startSentinelRuntime(runtime, engine, opts) {
                     pythonBin: ebpfCfg.pythonBin,
                     runnerScript: ebpfCfg.runnerScript,
                     runnerBin: ebpfCfg.runnerBin,
+                    lifecycle: ebpfCfg.lifecycle,
                 }));
             }
         }
@@ -102,7 +122,8 @@ function readEbpfConfig(config) {
     const pythonBin = typeof ebpf.pythonBin === "string" ? ebpf.pythonBin : undefined;
     const runnerScript = typeof ebpf.runnerScript === "string" ? ebpf.runnerScript : undefined;
     const runnerBin = typeof ebpf.runnerBin === "string" ? ebpf.runnerBin : undefined;
-    return { enabled, pythonBin, runnerScript, runnerBin };
+    const lifecycle = ebpf.lifecycle === true ? true : undefined;
+    return { enabled, pythonBin, runnerScript, runnerBin, lifecycle };
 }
 function readUprobeConfig(config) {
     const probes = (config.probes ?? {});
@@ -135,6 +156,75 @@ function readLsmConfig(config) {
     const minSeverity = l.minSeverity === "high" || l.minSeverity === "critical" ? l.minSeverity : undefined;
     const socketPath = typeof l.socketPath === "string" ? l.socketPath : undefined;
     return { enabled, runnerBin, policyTtlSeconds, maxEntries, minSeverity, socketPath };
+}
+function readEventQueueConfig(config) {
+    const sentinel = (config.sentinel ?? {});
+    const eq = (sentinel.eventQueue ?? {});
+    const maxDepth = typeof eq.maxDepth === "number" && eq.maxDepth > 0 ? eq.maxDepth : undefined;
+    const sampleRate = typeof eq.sampleRate === "number" && eq.sampleRate >= 0 && eq.sampleRate <= 1
+        ? eq.sampleRate
+        : undefined;
+    if (maxDepth === undefined && sampleRate === undefined)
+        return undefined;
+    const out = {};
+    if (maxDepth !== undefined)
+        out.maxDepth = maxDepth;
+    if (sampleRate !== undefined)
+        out.sampleRate = sampleRate;
+    return out;
+}
+function readAttributionConfig(config) {
+    const sentinel = (config.sentinel ?? {});
+    const a = (sentinel.attribution ?? {});
+    const num = (v, min = 0) => typeof v === "number" && v > min ? v : undefined;
+    const correlationWindowMs = num(a.correlationWindowMs);
+    const causalWindowMs = num(a.causalWindowMs);
+    const maxTreeNodes = num(a.maxTreeNodes);
+    const staleNodeMs = num(a.staleNodeMs);
+    const pruneNodeMs = num(a.pruneNodeMs);
+    const maxCausalPerSession = num(a.maxCausalPerSession);
+    if (correlationWindowMs === undefined &&
+        causalWindowMs === undefined &&
+        maxTreeNodes === undefined &&
+        staleNodeMs === undefined &&
+        pruneNodeMs === undefined &&
+        maxCausalPerSession === undefined) {
+        return undefined;
+    }
+    const out = {};
+    if (correlationWindowMs !== undefined)
+        out.correlationWindowMs = correlationWindowMs;
+    if (causalWindowMs !== undefined)
+        out.causalWindowMs = causalWindowMs;
+    if (maxTreeNodes !== undefined)
+        out.maxTreeNodes = maxTreeNodes;
+    if (staleNodeMs !== undefined)
+        out.staleNodeMs = staleNodeMs;
+    if (pruneNodeMs !== undefined)
+        out.pruneNodeMs = pruneNodeMs;
+    if (maxCausalPerSession !== undefined)
+        out.maxCausalPerSession = maxCausalPerSession;
+    return out;
+}
+function readContextConfig(config) {
+    const sentinel = (config.sentinel ?? {});
+    const ctx = (sentinel.context ?? {});
+    const buf = (ctx.buffer ?? {});
+    const num = (v, min = 0) => typeof v === "number" && v > min ? v : undefined;
+    const maxPerSession = num(buf.maxPerSession);
+    const maxSessions = num(buf.maxSessions);
+    const sessionTtlMs = num(buf.sessionTtlMs);
+    if (maxPerSession === undefined && maxSessions === undefined && sessionTtlMs === undefined) {
+        return undefined;
+    }
+    const out = {};
+    if (maxPerSession !== undefined)
+        out.maxPerSession = maxPerSession;
+    if (maxSessions !== undefined)
+        out.maxSessions = maxSessions;
+    if (sessionTtlMs !== undefined)
+        out.sessionTtlMs = sessionTtlMs;
+    return out;
 }
 /**
  * Translate `userConfig.nativeJudge` into RegExp arrays for createNativeJudge.

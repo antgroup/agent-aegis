@@ -187,3 +187,92 @@ describe("handleLine", () => {
     expect(published).toHaveLength(0);
   });
 });
+
+describe("createEbpfProbe — lifecycle messages (M10 P1.2)", () => {
+  it("routes fork lifecycle messages to ProbeEvent", async () => {
+    const fake = makeFakeChild();
+    const probe = createEbpfProbe({
+      platformOverride: { supported: true, platform: "linux" },
+      spawnOverride: () => fake,
+    });
+    const { deps, published } = makeDeps();
+    await probe.start(deps);
+    fake.emitStdout(
+      JSON.stringify({
+        kind: "lifecycle",
+        event: "fork",
+        pid: 100,
+        ppid: 1,
+        ts: 5000,
+        comm: "bash",
+        childPid: 200,
+        proc: { ppid: 1, uid: 0 },
+      }) + "\n",
+    );
+    await new Promise((r) => setImmediate(r));
+    expect(published).toHaveLength(1);
+    const ev = published[0] as Record<string, unknown>;
+    expect(ev.source).toBe("ebpf");
+    expect(ev.syscall).toBe("fork");
+    expect(ev.pid).toBe(100);
+    expect((ev.meta as Record<string, unknown>).forkChildPid).toBe(200);
+    expect((ev.proc as Record<string, unknown>).uid).toBe(0);
+    await probe.stop();
+  });
+
+  it("routes exec lifecycle messages with argv", async () => {
+    const fake = makeFakeChild();
+    const probe = createEbpfProbe({
+      platformOverride: { supported: true, platform: "linux" },
+      spawnOverride: () => fake,
+    });
+    const { deps, published } = makeDeps();
+    await probe.start(deps);
+    fake.emitStdout(
+      JSON.stringify({
+        kind: "lifecycle",
+        event: "exec",
+        pid: 200,
+        ppid: 100,
+        ts: 5001,
+        comm: "cat",
+        path: "/bin/cat",
+        argv: ["cat", "/etc/shadow"],
+      }) + "\n",
+    );
+    await new Promise((r) => setImmediate(r));
+    expect(published).toHaveLength(1);
+    const ev = published[0] as Record<string, unknown>;
+    expect(ev.syscall).toBe("exec");
+    expect((ev.args as Record<string, unknown>).argv).toEqual(["cat", "/etc/shadow"]);
+    expect((ev.args as Record<string, unknown>).path).toBe("/bin/cat");
+    await probe.stop();
+  });
+
+  it("routes exit lifecycle messages with exitCode in meta", async () => {
+    const fake = makeFakeChild();
+    const probe = createEbpfProbe({
+      platformOverride: { supported: true, platform: "linux" },
+      spawnOverride: () => fake,
+    });
+    const { deps, published } = makeDeps();
+    await probe.start(deps);
+    fake.emitStdout(
+      JSON.stringify({
+        kind: "lifecycle",
+        event: "exit",
+        pid: 200,
+        ppid: 100,
+        ts: 5002,
+        comm: "cat",
+        exitCode: 1,
+      }) + "\n",
+    );
+    await new Promise((r) => setImmediate(r));
+    expect(published).toHaveLength(1);
+    const ev = published[0] as Record<string, unknown>;
+    expect(ev.syscall).toBe("exit");
+    expect((ev.meta as Record<string, unknown>).exitCode).toBe(1);
+    await probe.stop();
+  });
+});

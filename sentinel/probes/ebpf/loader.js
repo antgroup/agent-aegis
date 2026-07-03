@@ -14,6 +14,7 @@ export function createEbpfProbe(opts = {}) {
     const runnerScript = opts.runnerScript ?? DEFAULT_RUNNER;
     const runnerBin = opts.runnerBin;
     const targets = opts.targets ?? ["execve", "openat", "connect"];
+    const lifecycle = opts.lifecycle ?? false;
     let child = null;
     let stopped = false;
     async function start(d) {
@@ -27,10 +28,14 @@ export function createEbpfProbe(opts = {}) {
         if (runnerBin) {
             cmd = runnerBin;
             args = ["--mode=ebpf", "--targets", targets.join(",")];
+            if (lifecycle)
+                args.push("--lifecycle");
         }
         else {
             cmd = pythonBin;
             args = [runnerScript, "--targets", targets.join(",")];
+            if (lifecycle)
+                args.push("--lifecycle");
         }
         try {
             child = opts.spawnOverride
@@ -126,6 +131,38 @@ function routeMessage(msg, deps) {
                 net: msg.net,
                 // Back-compat: the native judge's process-tree check reads meta.ppid.
                 meta: msg.ppid !== undefined ? { ppid: msg.ppid, comm: msg.comm } : { comm: msg.comm },
+            });
+            void deps.publish(event);
+            return;
+        }
+        case "lifecycle": {
+            const ctx = deps.runtime.getCurrentContext();
+            const meta = {};
+            if (msg.ppid !== undefined)
+                meta.ppid = msg.ppid;
+            if (msg.comm !== undefined)
+                meta.comm = msg.comm;
+            if (msg.childPid !== undefined)
+                meta.forkChildPid = msg.childPid;
+            if (msg.exitCode !== undefined)
+                meta.exitCode = msg.exitCode;
+            const args = {};
+            if (msg.argv)
+                args.argv = msg.argv;
+            if (msg.path)
+                args.path = msg.path;
+            const event = createProbeEvent({
+                source: EVENT_SOURCE,
+                syscall: msg.event, // "fork" | "exec" | "exit"
+                pid: msg.pid,
+                timestamp: msg.ts,
+                args,
+                sessionKey: ctx.sessionKey,
+                runId: ctx.runId,
+                toolName: ctx.toolName,
+                proc: buildProc(msg),
+                container: msg.container,
+                meta: Object.keys(meta).length > 0 ? meta : undefined,
             });
             void deps.publish(event);
             return;

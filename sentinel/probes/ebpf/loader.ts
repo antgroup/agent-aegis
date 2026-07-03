@@ -34,6 +34,8 @@ export interface EbpfProbeOptions {
    */
   runnerBin?: string;
   targets?: ReadonlyArray<"execve" | "openat" | "connect">;
+  /** Enable process lifecycle tracepoints (fork/exec/exit). M10 P1.2. */
+  lifecycle?: boolean;
   /** Test seam: override platform detection. */
   platformOverride?: EbpfSupport;
   /** Test seam: override spawn so we don't actually launch python. */
@@ -46,6 +48,7 @@ export function createEbpfProbe(opts: EbpfProbeOptions = {}): Probe {
   const runnerScript = opts.runnerScript ?? DEFAULT_RUNNER;
   const runnerBin = opts.runnerBin;
   const targets = opts.targets ?? ["execve", "openat", "connect"];
+  const lifecycle = opts.lifecycle ?? false;
 
   let child: ChildProcessLike | null = null;
   let stopped = false;
@@ -62,9 +65,11 @@ export function createEbpfProbe(opts: EbpfProbeOptions = {}): Probe {
     if (runnerBin) {
       cmd = runnerBin;
       args = ["--mode=ebpf", "--targets", targets.join(",")];
+      if (lifecycle) args.push("--lifecycle");
     } else {
       cmd = pythonBin;
       args = [runnerScript, "--targets", targets.join(",")];
+      if (lifecycle) args.push("--lifecycle");
     }
     try {
       child = opts.spawnOverride
@@ -166,6 +171,32 @@ function routeMessage(msg: EbpfMessage, deps: ProbeDeps): void {
         net: msg.net,
         // Back-compat: the native judge's process-tree check reads meta.ppid.
         meta: msg.ppid !== undefined ? { ppid: msg.ppid, comm: msg.comm } : { comm: msg.comm },
+      });
+      void deps.publish(event);
+      return;
+    }
+    case "lifecycle": {
+      const ctx = deps.runtime.getCurrentContext();
+      const meta: Record<string, unknown> = {};
+      if (msg.ppid !== undefined) meta.ppid = msg.ppid;
+      if (msg.comm !== undefined) meta.comm = msg.comm;
+      if (msg.childPid !== undefined) meta.forkChildPid = msg.childPid;
+      if (msg.exitCode !== undefined) meta.exitCode = msg.exitCode;
+      const args: Record<string, unknown> = {};
+      if (msg.argv) args.argv = msg.argv;
+      if (msg.path) args.path = msg.path;
+      const event = createProbeEvent({
+        source: EVENT_SOURCE,
+        syscall: msg.event, // "fork" | "exec" | "exit"
+        pid: msg.pid,
+        timestamp: msg.ts,
+        args,
+        sessionKey: ctx.sessionKey,
+        runId: ctx.runId,
+        toolName: ctx.toolName,
+        proc: buildProc(msg),
+        container: msg.container,
+        meta: Object.keys(meta).length > 0 ? meta : undefined,
       });
       void deps.publish(event);
       return;

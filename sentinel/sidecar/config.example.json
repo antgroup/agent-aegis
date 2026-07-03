@@ -9,8 +9,47 @@
   },
   "probes": {
     "//": "ebpf/uprobe = observe only; lsm = in-kernel enforce (needs kernel >=5.7 + BTF + bpf in LSM list, and nativeJudge.mode=enforce)",
-    "ebpf": { "enabled": true, "pythonBin": "/usr/bin/python3" },
+    "ebpf": {
+      "enabled": true,
+      "pythonBin": "/usr/bin/python3",
+      "//lifecycle": "Enable fork/exec/exit process tracking (M10 P1.2). Increases event volume significantly.",
+      "lifecycle": false
+    },
     "uprobe": { "enabled": false },
     "lsm": { "enabled": false, "minSeverity": "high" }
+  },
+  "sentinel": {
+    "eventQueue": {
+      "//maxDepth": "Max events buffered between probe input and judge processing. Overflow drops new events with a counted marker in the JSONL log.",
+      "maxDepth": 4096,
+      "//sampleRate": "Sampling rate 0..1 (default 1.0 = no sampling). Under burst, sets the fraction of events accepted before the queue check.",
+      "sampleRate": 1.0
+    },
+    "attribution": {
+      "//": "M11: attribution + correlation + causal-chain engine. All optional; unset values fall back to engine defaults.",
+      "//correlationWindowMs": "How long a tool-call → syscall correlation window stays open (default 30000).",
+      "correlationWindowMs": 30000,
+      "//causalWindowMs": "How far back the causal-chain detector looks (default 60000).",
+      "causalWindowMs": 60000,
+      "//maxTreeNodes": "Max process-tree nodes before prune (default 8192).",
+      "maxTreeNodes": 8192,
+      "//staleNodeMs": "Process-tree stale threshold in ms (default 300000 = 5 min).",
+      "staleNodeMs": 300000,
+      "//pruneNodeMs": "Process-tree prune threshold in ms (default 600000 = 10 min, guards against PID reuse).",
+      "pruneNodeMs": 600000,
+      "//maxCausalPerSession": "Cap on events kept per session for causal detection (default 500).",
+      "maxCausalPerSession": 500
+    },
+    "context": {
+      "//": "M11.5: session-level event context pipeline for AI/rule judges.",
+      "buffer": {
+        "//maxPerSession": "Max events retained per session (default 200). Oldest events are dropped when exceeded.",
+        "maxPerSession": 200,
+        "//maxSessions": "Max sessions tracked before LRU eviction (default 64).",
+        "maxSessions": 64,
+        "//sessionTtlMs": "Idle session expiry in ms (default 300000 = 5 min).",
+        "sessionTtlMs": 300000
+      }
+    }
   }
 }

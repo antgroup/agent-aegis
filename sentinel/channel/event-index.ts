@@ -36,6 +36,12 @@ export interface EventQuery {
   ppid?: number;
   syscall?: string;
   source?: string;
+  /** Attribution bucket: "agent" | "descendant" | "external" (M11). */
+  attribution?: string;
+  /** Events whose correlation_id matches (M11). */
+  correlationId?: string;
+  /** Events whose parent_event_id matches (M11). */
+  parentEventId?: string;
   /** Inclusive lower bound on `ts` (epoch ms). */
   since?: number;
   /** Inclusive upper bound on `ts` (epoch ms). */
@@ -60,6 +66,8 @@ export interface EventRow {
   exe: string | null;
   cgroup: string | null;
   correlationId: string | null;
+  attribution: string | null;
+  parentEventId: string | null;
   args: Record<string, unknown>;
   proc: Record<string, unknown> | null;
   container: Record<string, unknown> | null;
@@ -95,6 +103,8 @@ CREATE TABLE IF NOT EXISTS events (
   exe TEXT,
   cgroup TEXT,
   correlation_id TEXT,
+  attribution TEXT,
+  parent_event_id TEXT,
   args_json TEXT,
   proc_json TEXT,
   container_json TEXT,
@@ -105,6 +115,9 @@ CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_key, ts);
 CREATE INDEX IF NOT EXISTS idx_events_run ON events(run_id, ts);
 CREATE INDEX IF NOT EXISTS idx_events_pid ON events(pid, ts);
 CREATE INDEX IF NOT EXISTS idx_events_syscall ON events(syscall, ts);
+CREATE INDEX IF NOT EXISTS idx_events_attribution ON events(attribution, ts);
+CREATE INDEX IF NOT EXISTS idx_events_parent ON events(parent_event_id);
+CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id, ts);
 CREATE TABLE IF NOT EXISTS verdicts (
   event_id TEXT NOT NULL,
   ts INTEGER NOT NULL,
@@ -117,6 +130,28 @@ CREATE TABLE IF NOT EXISTS verdicts (
 );
 CREATE INDEX IF NOT EXISTS idx_verdicts_event ON verdicts(event_id);
 `;
+
+/**
+ * Migration for pre-M11 databases: add `attribution` / `parent_event_id`
+ * columns and their indexes. New DBs get these from {@link CREATE_SQL} already;
+ * this is a no-op there (the ALTERs are guarded by column-existence checks).
+ * Implemented as a function so we keep all the node:sqlite surface in one place.
+ */
+function migrate(db: SqliteDb): void {
+  const cols = db
+    .prepare("PRAGMA table_info(events)")
+    .all()
+    .map((r) => String(r.name));
+  if (!cols.includes("attribution")) {
+    db.exec("ALTER TABLE events ADD COLUMN attribution TEXT");
+  }
+  if (!cols.includes("parent_event_id")) {
+    db.exec("ALTER TABLE events ADD COLUMN parent_event_id TEXT");
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_events_attribution ON events(attribution, ts)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_events_parent ON events(parent_event_id)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_events_correlation ON events(correlation_id, ts)");
+}
 
 export class SqliteEventIndex {
   private db: SqliteDb | null = null;
@@ -138,12 +173,14 @@ export class SqliteEventIndex {
       db.exec("PRAGMA journal_mode = WAL;");
       db.exec("PRAGMA synchronous = NORMAL;");
       db.exec(CREATE_SQL);
+      // M11: add attribution / parent_event_id columns to pre-M11 DBs.
+      migrate(db);
       this.insertEventStmt = db.prepare(
         `INSERT OR REPLACE INTO events
           (id, ts, source, syscall, pid, ppid, uid, gid, session_key, run_id,
-           tool_name, comm, exe, cgroup, correlation_id, args_json, proc_json,
-           container_json, net_json)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           tool_name, comm, exe, cgroup, correlation_id, attribution,
+           parent_event_id, args_json, proc_json, container_json, net_json)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       );
       this.insertVerdictStmt = db.prepare(
         `INSERT INTO verdicts
@@ -181,6 +218,8 @@ export class SqliteEventIndex {
       proc?.exe ?? null,
       event.container?.cgroup ?? null,
       event.correlationId ?? null,
+      (event.meta?.attribution as string) ?? null,
+      event.parentEventId ?? null,
       jsonOrNull(event.args),
       jsonOrNull(event.proc),
       jsonOrNull(event.container),
@@ -220,6 +259,9 @@ export class SqliteEventIndex {
     eq("ppid", q.ppid);
     eq("syscall", q.syscall);
     eq("source", q.source);
+    eq("attribution", q.attribution);
+    eq("correlation_id", q.correlationId);
+    eq("parent_event_id", q.parentEventId);
     if (q.since !== undefined) {
       where.push("ts >= ?");
       params.push(q.since);
@@ -287,6 +329,8 @@ function toEventRow(r: Record<string, unknown>): EventRow {
     exe: strOrNull(r.exe),
     cgroup: strOrNull(r.cgroup),
     correlationId: strOrNull(r.correlation_id),
+    attribution: strOrNull(r.attribution),
+    parentEventId: strOrNull(r.parent_event_id),
     args: parseJson(r.args_json) ?? {},
     proc: parseJson(r.proc_json),
     container: parseJson(r.container_json),

@@ -46,6 +46,7 @@ func main() {
 	targets := flag.String("targets", "execve,openat,connect", "comma-separated target syscalls (ebpf/uprobe only)")
 	libcPath := flag.String("libc-path", "/lib/x86_64-linux-gnu/libc.so.6", "uprobe libc path")
 	_ = flag.String("openssl-path", "", "uprobe openssl path (reserved)")
+	lifecycle := flag.Bool("lifecycle", false, "enable fork/exec/exit lifecycle tracepoints (ebpf mode only)")
 	flag.Parse()
 
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -55,7 +56,11 @@ func main() {
 
 	switch *mode {
 	case "ebpf":
-		runEbpfMode(parseTargets(*targets))
+		t := parseTargets(*targets)
+		if *lifecycle {
+			t["lifecycle"] = true
+		}
+		runEbpfMode(t)
 	case "uprobe":
 		runUprobeMode(parseTargets(*targets), *libcPath)
 	case "lsm":
@@ -87,6 +92,9 @@ const (
 	kindExec   = 0
 	kindOpen   = 1
 	kindConn   = 2
+	kindFork   = 5
+	kindExecLC = 6
+	kindExitLC = 7
 )
 
 type sysEvent struct {
@@ -105,6 +113,7 @@ type runnerMessage struct {
 	Probes  []string `json:"probes,omitempty"`
 	Hook    string   `json:"hook,omitempty"`
 	Syscall string   `json:"syscall,omitempty"`
+	Event   string   `json:"event,omitempty"` // lifecycle event type: fork/exec/exit
 	Pid     uint32   `json:"pid,omitempty"`
 	Ppid    uint32   `json:"ppid,omitempty"`
 	Comm    string   `json:"comm,omitempty"`
@@ -134,6 +143,12 @@ func syscallName(kind uint32) string {
 		return "openat"
 	case kindConn:
 		return "connect"
+	case kindFork:
+		return "fork"
+	case kindExecLC:
+		return "exec"
+	case kindExitLC:
+		return "exit"
 	}
 	return "unknown"
 }
@@ -149,6 +164,31 @@ func trimZero(b []byte) []byte {
 
 func emitSysEvent(ev sysEvent, targets map[string]bool) {
 	sc := syscallName(ev.Kind)
+	// Lifecycle events (fork/exec/exit) are only emitted when the "lifecycle"
+	// target is enabled. Regular syscall targets are filtered as before.
+	if ev.Kind == kindFork || ev.Kind == kindExecLC || ev.Kind == kindExitLC {
+		if !targets["lifecycle"] {
+			return
+		}
+		argv := []string{}
+		for i := uint32(0); i < ev.Argc && i < maxArgv; i++ {
+			a := string(trimZero(ev.Argv[i][:]))
+			if a != "" {
+				argv = append(argv, a)
+			}
+		}
+		emit(runnerMessage{
+			Kind:  "lifecycle",
+			Event: sc,
+			Pid:   ev.Pid,
+			Ppid:  ev.Ppid,
+			Comm:  string(trimZero(ev.Comm[:])),
+			Path:  string(trimZero(ev.Path[:])),
+			Argv:  argv,
+			Ts:    time.Now().UnixMilli(),
+		})
+		return
+	}
 	if !targets[sc] {
 		return
 	}
@@ -215,6 +255,29 @@ func runEbpfMode(targets map[string]bool) {
 		os.Exit(6)
 	}
 	defer closeLinks(links)
+
+	// Lifecycle tracepoints (opt-in via --lifecycle flag).
+	if targets["lifecycle"] {
+		lcProgs := []struct{ name, prog, group, sym string }{
+			{"fork", "tp_sched_fork", "sched", "sched_process_fork"},
+			{"exec_lifecycle", "tp_sched_exec", "sched", "sched_process_exec"},
+			{"exit", "tp_sched_exit", "sched", "sched_process_exit"},
+		}
+		for _, t := range lcProgs {
+			p := coll.Programs[t.prog]
+			if p == nil {
+				logLine("warn", "lifecycle tracepoint program missing: "+t.prog)
+				continue
+			}
+			l, err := link.Tracepoint(t.group, t.sym, p, nil)
+			if err != nil {
+				logLine("warn", "lifecycle tracepoint attach "+t.name+" failed: "+err.Error())
+				continue
+			}
+			links = append(links, l)
+			attached = append(attached, t.name)
+		}
+	}
 
 	emit(runnerMessage{Kind: "ready", Probes: attached})
 

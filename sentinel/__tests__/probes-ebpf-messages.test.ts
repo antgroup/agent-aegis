@@ -133,3 +133,96 @@ describe("parseEbpfMessage — v2 enrichment (proc/container/net)", () => {
     }
   });
 });
+
+describe("parseEbpfMessage — lifecycle messages (M10 P1.2)", () => {
+  it("parses fork lifecycle messages", () => {
+    const line = JSON.stringify({
+      kind: "lifecycle",
+      event: "fork",
+      pid: 100,
+      ppid: 1,
+      ts: 5000,
+      comm: "bash",
+      childPid: 200,
+      proc: { ppid: 1, uid: 0 },
+    });
+    const out = parseEbpfMessage(line);
+    expect(out).not.toBeNull();
+    if (out && out.kind === "lifecycle") {
+      expect(out.event).toBe("fork");
+      expect(out.pid).toBe(100);
+      expect(out.ppid).toBe(1);
+      expect(out.ts).toBe(5000);
+      expect(out.comm).toBe("bash");
+      expect(out.childPid).toBe(200);
+      expect(out.proc).toEqual({ ppid: 1, uid: 0 });
+    }
+  });
+
+  it("parses exec lifecycle messages with argv", () => {
+    const line = JSON.stringify({
+      kind: "lifecycle",
+      event: "exec",
+      pid: 200,
+      ppid: 100,
+      ts: 5001,
+      comm: "cat",
+      path: "/bin/cat",
+      argv: ["cat", "/etc/shadow"],
+    });
+    const out = parseEbpfMessage(line);
+    expect(out).not.toBeNull();
+    if (out && out.kind === "lifecycle") {
+      expect(out.event).toBe("exec");
+      expect(out.pid).toBe(200);
+      expect(out.path).toBe("/bin/cat");
+      expect(out.argv).toEqual(["cat", "/etc/shadow"]);
+      expect(out.exitCode).toBeUndefined();
+    }
+  });
+
+  it("parses exit lifecycle messages with exitCode", () => {
+    const line = JSON.stringify({
+      kind: "lifecycle",
+      event: "exit",
+      pid: 200,
+      ppid: 100,
+      ts: 5002,
+      comm: "cat",
+      exitCode: 0,
+    });
+    const out = parseEbpfMessage(line);
+    expect(out).not.toBeNull();
+    if (out && out.kind === "lifecycle") {
+      expect(out.event).toBe("exit");
+      expect(out.pid).toBe(200);
+      expect(out.exitCode).toBe(0);
+      expect(out.childPid).toBeUndefined();
+    }
+  });
+
+  it("returns null for lifecycle with invalid event type", () => {
+    expect(parseEbpfMessage('{"kind":"lifecycle","event":"unknown","pid":1,"ts":1}')).toBeNull();
+  });
+
+  it("defaults pid/ts when missing on lifecycle", () => {
+    const out = parseEbpfMessage('{"kind":"lifecycle","event":"fork"}');
+    expect(out).not.toBeNull();
+    if (out && out.kind === "lifecycle") {
+      expect(out.pid).toBe(0);
+      expect(typeof out.ts).toBe("number");
+    }
+  });
+
+  it("ignores unknown fields on lifecycle messages", () => {
+    const out = parseEbpfMessage(
+      '{"kind":"lifecycle","event":"exit","pid":1,"ts":1,"exitCode":2,"bogus":true}',
+    );
+    expect(out).not.toBeNull();
+    if (out && out.kind === "lifecycle") {
+      expect(out.exitCode).toBe(2);
+      // @ts-expect-error — bogus field should not appear on the typed object
+      expect((out as Record<string, unknown>).bogus).toBeUndefined();
+    }
+  });
+});

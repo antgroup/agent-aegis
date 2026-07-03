@@ -29,6 +29,21 @@ export class ProbeEventStore {
     currentFile() {
         return path.join(this.dir, `events-${this.dateKey()}.jsonl`);
     }
+    /**
+     * Append a drop-marker to the JSONL log (P1.4 backpressure).
+     * Records how many events were lost (to queue-full or sampling) since
+     * the last marker so that post-incident analysis can quantify silent loss.
+     */
+    appendDropMarker(dropped, reason) {
+        if (dropped <= 0)
+            return;
+        this.write({
+            kind: "drop_marker",
+            dropped,
+            reason,
+            ts: Date.now(),
+        });
+    }
     async close() {
         this.closed = true;
         if (!this.handle)

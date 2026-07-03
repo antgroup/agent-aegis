@@ -7,7 +7,7 @@
  */
 import type { ContainerInfo, NetInfo, ProcessInfo } from "../../channel/event.js";
 
-export type EbpfMessage = EbpfReady | EbpfSyscall | EbpfLog;
+export type EbpfMessage = EbpfReady | EbpfSyscall | EbpfLifecycle | EbpfLog;
 
 export interface EbpfReady {
   kind: "ready";
@@ -33,6 +33,32 @@ export interface EbpfSyscall {
   /** v2/M10 enrichment — structured connection info for network syscalls. */
   net?: NetInfo;
   extra?: Record<string, unknown>;
+}
+
+/** Process lifecycle event (M10 P1.2): fork / exec / exit. */
+export type LifecycleEvent = "fork" | "exec" | "exit";
+
+export interface EbpfLifecycle {
+  kind: "lifecycle";
+  /** Which lifecycle transition: fork (child created), exec (image replaced), exit (process gone). */
+  event: LifecycleEvent;
+  pid: number;
+  ppid?: number;
+  /** Probe wall-clock timestamp in milliseconds. */
+  ts: number;
+  comm?: string;
+  /** fork only: PID of the new child process. */
+  childPid?: number;
+  /** exec only: target binary path. */
+  path?: string;
+  /** exec only: argument vector. */
+  argv?: string[];
+  /** exit only: process exit code. */
+  exitCode?: number;
+  /** v2/M10 enrichment — process identity + lineage. */
+  proc?: ProcessInfo;
+  /** v2/M10 enrichment — container / namespace context. */
+  container?: ContainerInfo;
 }
 
 export interface EbpfLog {
@@ -62,6 +88,8 @@ export function parseEbpfMessage(line: string): EbpfMessage | null {
       return parseReady(r);
     case "syscall":
       return parseSyscall(r);
+    case "lifecycle":
+      return parseLifecycle(r);
     case "log":
       return parseLog(r);
     default:
@@ -96,6 +124,27 @@ function parseSyscall(r: Record<string, unknown>): EbpfSyscall | null {
   if (r.extra && typeof r.extra === "object" && !Array.isArray(r.extra)) {
     out.extra = r.extra as Record<string, unknown>;
   }
+  return out;
+}
+
+function parseLifecycle(r: Record<string, unknown>): EbpfLifecycle | null {
+  const event = r.event;
+  if (event !== "fork" && event !== "exec" && event !== "exit") return null;
+  const pid = typeof r.pid === "number" ? r.pid : 0;
+  const ts = typeof r.ts === "number" ? r.ts : Date.now();
+  const out: EbpfLifecycle = { kind: "lifecycle", event, pid, ts };
+  if (typeof r.ppid === "number") out.ppid = r.ppid;
+  if (typeof r.comm === "string") out.comm = r.comm;
+  if (typeof r.childPid === "number") out.childPid = r.childPid;
+  if (typeof r.path === "string") out.path = r.path;
+  if (Array.isArray(r.argv) && r.argv.every((s) => typeof s === "string")) {
+    out.argv = r.argv as string[];
+  }
+  if (typeof r.exitCode === "number") out.exitCode = r.exitCode;
+  const proc = narrowProc(r.proc);
+  if (proc) out.proc = proc;
+  const container = narrowContainer(r.container);
+  if (container) out.container = container;
   return out;
 }
 

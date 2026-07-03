@@ -55,6 +55,26 @@ class NetEvtT(ct.Structure):
         ("comm", ct.c_char * TASK_COMM_LEN),
     ]
 
+
+# Lifecycle event struct (M10 P1.2): fork / exec / exit
+LC_FORK = 0
+LC_EXEC = 1
+LC_EXIT = 2
+
+
+class LifecycleEvtT(ct.Structure):
+    _fields_ = [
+        ("event", ct.c_uint32),       # LC_FORK / LC_EXEC / LC_EXIT
+        ("pid", ct.c_uint32),
+        ("ppid", ct.c_uint32),
+        ("child_pid", ct.c_uint32),   # fork only
+        ("exit_code", ct.c_int32),    # exit only
+        ("comm", ct.c_char * TASK_COMM_LEN),
+        ("path", ct.c_char * 256),    # exec only
+        ("argc", ct.c_uint32),
+        ("argv", (ct.c_char * MAX_ARG_LEN) * MAX_ARGV),  # exec only
+    ]
+
 try:
     from bcc import BPF  # type: ignore[import-untyped]
 except ImportError:
@@ -111,6 +131,25 @@ struct net_evt_t {
 };
 BPF_PERF_OUTPUT(net_events);
 
+// --- Lifecycle events (M10 P1.2) ---
+#define LC_FORK  0
+#define LC_EXEC  1
+#define LC_EXIT  2
+
+struct lifecycle_evt_t {
+    u32 event;          // LC_FORK / LC_EXEC / LC_EXIT
+    u32 pid;
+    u32 ppid;
+    u32 child_pid;      // fork only
+    int exit_code;      // exit only
+    char comm[TASK_COMM_LEN];
+    char path[256];     // exec only
+    u32 argc;
+    char argv[MAX_ARGV][MAX_ARG_LEN]; // exec only
+};
+BPF_PERF_OUTPUT(lifecycle_events);
+BPF_PERCPU_ARRAY(lifecycle_scratch, struct lifecycle_evt_t, 1);
+
 TRACEPOINT_PROBE(syscalls, sys_enter_execve) {
     u32 zero = 0;
     struct exec_evt_t *evt = exec_scratch.lookup(&zero);
@@ -158,6 +197,67 @@ TRACEPOINT_PROBE(syscalls, sys_enter_connect) {
     evt.ppid = t->real_parent->tgid;
     bpf_get_current_comm(&evt.comm, sizeof(evt.comm));
     net_events.perf_submit(args, &evt, sizeof(evt));
+    return 0;
+}
+
+// --- Lifecycle tracepoints (M10 P1.2) ---
+
+TRACEPOINT_PROBE(sched, sched_process_fork) {
+    u32 zero = 0;
+    struct lifecycle_evt_t *evt = lifecycle_scratch.lookup(&zero);
+    if (!evt) return 0;
+    __builtin_memset(evt, 0, sizeof(*evt));
+    evt->event = LC_FORK;
+    // parent is the current process; child is args->child_pid (BCC provides
+    // the fork tracepoint with 'parent' and 'child' task structs).
+    evt->pid = args->parent->pid;
+    evt->ppid = args->parent->real_parent->tgid;
+    evt->child_pid = args->child->pid;
+    bpf_get_current_comm(&evt->comm, sizeof(evt->comm));
+    lifecycle_events.perf_submit(args, evt, sizeof(*evt));
+    return 0;
+}
+
+TRACEPOINT_PROBE(sched, sched_process_exec) {
+    u32 zero = 0;
+    struct lifecycle_evt_t *evt = lifecycle_scratch.lookup(&zero);
+    if (!evt) return 0;
+    __builtin_memset(evt, 0, sizeof(*evt));
+    evt->event = LC_EXEC;
+    evt->pid = bpf_get_current_pid_tgid() >> 32;
+    struct task_struct *t = (struct task_struct *)bpf_get_current_task();
+    evt->ppid = t->real_parent->tgid;
+    bpf_get_current_comm(&evt->comm, sizeof(evt->comm));
+    bpf_probe_read_user_str(evt->path, sizeof(evt->path), args->filename);
+    evt->argc = 0;
+    const char *const *argv_ptr = (const char *const *)args->argv;
+    #pragma unroll
+    for (int i = 0; i < MAX_ARGV; i++) {
+        const char *one = NULL;
+        if (bpf_probe_read_user(&one, sizeof(one), &argv_ptr[i]) != 0) break;
+        if (one == NULL) break;
+        bpf_probe_read_user_str(evt->argv[i], MAX_ARG_LEN, one);
+        evt->argc = i + 1;
+    }
+    lifecycle_events.perf_submit(args, evt, sizeof(*evt));
+    return 0;
+}
+
+TRACEPOINT_PROBE(sched, sched_process_exit) {
+    u32 zero = 0;
+    struct lifecycle_evt_t *evt = lifecycle_scratch.lookup(&zero);
+    if (!evt) return 0;
+    __builtin_memset(evt, 0, sizeof(*evt));
+    evt->event = LC_EXIT;
+    evt->pid = bpf_get_current_pid_tgid() >> 32;
+    struct task_struct *t = (struct task_struct *)bpf_get_current_task();
+    evt->ppid = t->real_parent->tgid;
+    bpf_get_current_comm(&evt->comm, sizeof(evt->comm));
+    // exit_code is encoded as (code << 8) | signum for normal exit,
+    // or just signum for signal death. We pass it raw; the consumer
+    // can decode via WEXITSTATUS / WTERMSIG.
+    evt->exit_code = args->exit_code;
+    lifecycle_events.perf_submit(args, evt, sizeof(*evt));
     return 0;
 }
 """
@@ -389,12 +489,133 @@ def make_net_handler(targets):
     return cb
 
 
+# --- Lifecycle event handlers (M10 P1.2) ---
+
+def make_fork_handler(lifecycle_enabled):
+    def cb(cpu, data, size):
+        if not lifecycle_enabled:
+            return
+        evt = ct.cast(data, ct.POINTER(LifecycleEvtT)).contents
+        obj = {
+            "kind": "lifecycle",
+            "event": "fork",
+            "pid": int(evt.pid),
+            "ppid": int(evt.ppid),
+            "ts": now_ms(),
+            "comm": evt.comm.decode("utf-8", "replace").strip("\x00"),
+            "childPid": int(evt.child_pid),
+        }
+        # fork: enrich the parent (current process) with full /proc data.
+        emit(attach_enrichment(obj, int(evt.pid), with_image=True))
+
+    return cb
+
+
+def make_exec_lifecycle_handler(lifecycle_enabled):
+    def cb(cpu, data, size):
+        if not lifecycle_enabled:
+            return
+        evt = ct.cast(data, ct.POINTER(LifecycleEvtT)).contents
+        argv = []
+        argc = int(evt.argc)
+        for i in range(min(argc, MAX_ARGV)):
+            s = bytes(evt.argv[i]).decode("utf-8", "replace").rstrip("\x00")
+            if s:
+                argv.append(s)
+        obj = {
+            "kind": "lifecycle",
+            "event": "exec",
+            "pid": int(evt.pid),
+            "ppid": int(evt.ppid),
+            "ts": now_ms(),
+            "comm": evt.comm.decode("utf-8", "replace").strip("\x00"),
+            "path": evt.path.decode("utf-8", "replace").strip("\x00"),
+        }
+        if argv:
+            obj["argv"] = argv
+        # exec: skip image enrichment (same reasoning as sys_enter_execve —
+        # /proc still reflects the pre-exec image).
+        emit(attach_enrichment(obj, int(evt.pid), with_image=False))
+
+    return cb
+
+
+def make_exit_handler(lifecycle_enabled):
+    def cb(cpu, data, size):
+        if not lifecycle_enabled:
+            return
+        evt = ct.cast(data, ct.POINTER(LifecycleEvtT)).contents
+        obj = {
+            "kind": "lifecycle",
+            "event": "exit",
+            "pid": int(evt.pid),
+            "ppid": int(evt.ppid),
+            "ts": now_ms(),
+            "comm": evt.comm.decode("utf-8", "replace").strip("\x00"),
+            "exitCode": int(evt.exit_code),
+        }
+        # exit: /proc may already be going away, so enrichment is best-effort.
+        emit(attach_enrichment(obj, int(evt.pid), with_image=True))
+
+    return cb
+
+
+def make_lifecycle_handler(lifecycle_enabled):
+    """Unified handler for all lifecycle events (fork/exec/exit).
+    All three tracepoints submit into the same lifecycle_events perf buffer.
+    The `event` field (LC_FORK=0, LC_EXEC=1, LC_EXIT=2) discriminates.
+    """
+    _EVENT_NAMES = {LC_FORK: "fork", LC_EXEC: "exec", LC_EXIT: "exit"}
+
+    def cb(cpu, data, size):
+        if not lifecycle_enabled:
+            return
+        evt = ct.cast(data, ct.POINTER(LifecycleEvtT)).contents
+        ev_type = int(evt.event)
+        event_name = _EVENT_NAMES.get(ev_type)
+        if event_name is None:
+            return  # unknown lifecycle type, ignore
+        obj = {
+            "kind": "lifecycle",
+            "event": event_name,
+            "pid": int(evt.pid),
+            "ppid": int(evt.ppid),
+            "ts": now_ms(),
+            "comm": evt.comm.decode("utf-8", "replace").strip("\x00"),
+        }
+        if ev_type == LC_FORK:
+            obj["childPid"] = int(evt.child_pid)
+            emit(attach_enrichment(obj, int(evt.pid), with_image=True))
+        elif ev_type == LC_EXEC:
+            argv = []
+            argc = int(evt.argc)
+            for i in range(min(argc, MAX_ARGV)):
+                s = bytes(evt.argv[i]).decode("utf-8", "replace").rstrip("\x00")
+                if s:
+                    argv.append(s)
+            obj["path"] = evt.path.decode("utf-8", "replace").strip("\x00")
+            if argv:
+                obj["argv"] = argv
+            emit(attach_enrichment(obj, int(evt.pid), with_image=False))
+        elif ev_type == LC_EXIT:
+            obj["exitCode"] = int(evt.exit_code)
+            emit(attach_enrichment(obj, int(evt.pid), with_image=True))
+
+    return cb
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--targets",
         default="execve,openat,connect",
         help="Comma-separated subset of {execve, openat, connect}.",
+    )
+    parser.add_argument(
+        "--lifecycle",
+        action="store_true",
+        default=False,
+        help="Enable sched_process_fork/exec/exit lifecycle tracepoints (M10 P1.2).",
     )
     args = parser.parse_args()
     targets = set(t.strip() for t in args.targets.split(",") if t.strip())
@@ -410,7 +631,16 @@ def main():
     bpf["file_events"].open_perf_buffer(make_file_handler(targets))
     bpf["net_events"].open_perf_buffer(make_net_handler(targets))
 
-    emit({"kind": "ready", "probes": sorted(targets)})
+    # Lifecycle tracepoints are opt-in (--lifecycle flag) because they
+    # significantly increase event volume (fork/exit are very frequent).
+    if args.lifecycle:
+        bpf["lifecycle_events"].open_perf_buffer(make_lifecycle_handler(True))
+
+    probe_list = sorted(targets)
+    if args.lifecycle:
+        probe_list = sorted(probe_list + ["fork", "exec_lifecycle", "exit"])
+
+    emit({"kind": "ready", "probes": probe_list})
 
     while True:
         try:

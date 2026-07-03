@@ -17,11 +17,19 @@ afterEach(() => {
   fs.rmSync(stateDir, { recursive: true, force: true });
 });
 
+/** Helper: flush the sentinel queue and wait for pending processing. */
+async function flushAndWait(sentinel: { flush(): Promise<void> }, ms = 50): Promise<void> {
+  await sentinel.flush();
+  // Give microtasks a chance to settle after the sync flush.
+  await new Promise((r) => setTimeout(r, ms));
+}
+
 describe("startSentinel", () => {
   it("starts with no judges and returns null verdict for published events", async () => {
     const runtime = createNoopRuntime({ stateDir });
     const sentinel = startSentinel(runtime);
-    expect(sentinel.status()).toEqual({ judges: 0, probes: 0 });
+    expect(sentinel.status()).toMatchObject({ judges: 0, probes: 0 });
+    // Probe events go through the queue, so publish returns null.
     const result = await sentinel.publish(
       createProbeEvent({ source: "test", syscall: "x", pid: 0, args: {} }),
     );
@@ -29,7 +37,7 @@ describe("startSentinel", () => {
     await sentinel.stop();
   });
 
-  it("runs the registered judges and aggregates verdicts", async () => {
+  it("runs the registered judges and persists verdicts", async () => {
     const runtime = createNoopRuntime({ stateDir });
     const sentinel = startSentinel(runtime);
     const blockJudge: Judge = {
@@ -56,7 +64,8 @@ describe("startSentinel", () => {
     sentinel.registerJudge(observeJudge);
     expect(sentinel.status().judges).toBe(2);
 
-    const result = await sentinel.publish(
+    // Publish a probe event and flush/wait so the judge pipeline runs.
+    await sentinel.publish(
       createProbeEvent({
         source: "test",
         syscall: "execve",
@@ -64,9 +73,17 @@ describe("startSentinel", () => {
         args: { argv: ["/bin/cat", "/etc/shadow"] },
       }),
     );
-    expect(result).not.toBeNull();
-    expect(result!.final.action).toBe("block");
-    expect(result!.sources).toHaveLength(2);
+    await flushAndWait(sentinel);
+
+    // The verdict should now be in the JSONL log.
+    const probeDir = path.join(stateDir, "probe-events");
+    const files = fs.readdirSync(probeDir).filter((f) => f.endsWith(".jsonl"));
+    expect(files.length).toBeGreaterThan(0);
+    const contents = fs.readFileSync(path.join(probeDir, files[0]), "utf8");
+    expect(contents).toContain("execve");
+    expect(contents).toContain("\"kind\":\"event\"");
+    expect(contents).toContain("\"kind\":\"verdict\"");
+    expect(contents).toContain("demo-block");
     await sentinel.stop();
   });
 
@@ -86,6 +103,8 @@ describe("startSentinel", () => {
     await sentinel.publish(
       createProbeEvent({ source: "test", syscall: "openat", pid: 1, args: {}, id: "persist-1" }),
     );
+    // Flush the queue and wait for async processing.
+    await flushAndWait(sentinel);
     await sentinel.stop();
 
     const probeDir = path.join(stateDir, "probe-events");
@@ -95,5 +114,34 @@ describe("startSentinel", () => {
     expect(contents).toContain("persist-1");
     expect(contents).toContain("\"kind\":\"event\"");
     expect(contents).toContain("\"kind\":\"verdict\"");
+  });
+
+  it("reports queue stats in status()", async () => {
+    const runtime = createNoopRuntime({ stateDir });
+    const sentinel = startSentinel(runtime, { eventQueue: { maxDepth: 100 } });
+    const status = sentinel.status();
+    expect(status.judges).toBe(0);
+    expect(status.probes).toBe(0);
+    expect(status.queueDepth).toBe(0);
+    expect(status.dropped).toBe(0);
+    expect(status.sampled).toBe(0);
+    await sentinel.stop();
+  });
+
+  it("backs pressure and counts drops when queue is full", async () => {
+    const runtime = createNoopRuntime({ stateDir });
+    const sentinel = startSentinel(runtime, { eventQueue: { maxDepth: 5 } });
+    // Publish 10 events — the queue only holds 5.
+    for (let i = 0; i < 10; i++) {
+      sentinel.publish(
+        createProbeEvent({ source: "test", syscall: "x", pid: i, args: {} }),
+      );
+    }
+    // Some should be enqueued, some dropped.
+    const status = sentinel.status();
+    expect(status.dropped).toBeGreaterThan(0);
+    // Flush to clean up.
+    await sentinel.flush();
+    await sentinel.stop();
   });
 });

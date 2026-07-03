@@ -202,18 +202,46 @@ function readLaunchPath(event: ProbeEvent): string | undefined {
 }
 
 /**
- * Filled in M5. Flags syscalls whose parent PID is outside the known agent
- * process tree. Always `observe` (never `block`) — false-positive risk is
- * non-trivial because legitimate agents do spawn detached helpers.
+ * Filled in M5, upgraded in M11. Flags syscalls from processes outside the
+ * known agent process tree. Always `observe` (never `block`) — false-positive
+ * risk is non-trivial because legitimate agents do spawn detached helpers.
  *
- * Sources of ppid: eBPF / uprobe / LSM probes set `event.meta.ppid` when the
- * kernel tracepoint exposes it, so the rule effectively only fires on
- * eBPF events.
+ * M11 attribution path: when the {@link AttributionEngine} has enriched the
+ * event, `event.meta.attribution` carries an authoritative `agent` /
+ * `descendant` / `external` verdict built from fork/exec/exit tracking plus
+ * /proc ancestor walks — far more reliable than a single ppid match. We
+ * prefer it when present.
+ *
+ * Fallback path (no enrichment): the M5 ppid heuristic — fire only when the
+ * caller supplied `agentPids` and the event's ppid is neither in that set
+ * nor equal to the event pid.
  */
 function judgeProcessTreeAnomaly(
   event: ProbeEvent,
   agentPids: readonly number[],
 ): Verdict | null {
+  // M11: authoritative attribution available — use it.
+  const attr = event.meta?.attribution as string | undefined;
+  if (attr === "agent" || attr === "descendant") return null;
+  if (attr === "external") {
+    return {
+      action: "observe",
+      severity: "medium",
+      reason: `native: syscall from process outside agent tree (attribution=external, pid=${event.pid})`,
+      judgeId: `${JUDGE_ID}:process-tree-anomaly`,
+      confidence: 0.8,
+      sideEffects: [
+        {
+          kind: "log",
+          level: "warn",
+          message: `attribution=external pid=${event.pid} ${event.syscall}`,
+        },
+      ],
+    };
+  }
+
+  // Fallback: pre-M11 ppid heuristic (no attribution engine, or event that
+  // bypassed enrichment such as a lifecycle fork/exec/exit event).
   if (agentPids.length === 0) return null;
   const ppid = readPpid(event);
   if (ppid === undefined) return null;

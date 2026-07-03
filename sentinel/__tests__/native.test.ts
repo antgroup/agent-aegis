@@ -100,4 +100,64 @@ describe("createNativeJudge", () => {
     );
     expect(blocked?.action).toBe("block");
   });
+
+  // --- M11: attribution-path process tree anomaly ---
+
+  it("M11: external attribution triggers process-tree-anomaly at medium severity", async () => {
+    const judge = createNativeJudge();
+    const ev = createProbeEvent({
+      source: "ebpf",
+      syscall: "openat",
+      pid: 9999,
+      args: { path: "/var/log/syslog" },
+      meta: { attribution: "external" },
+    });
+    const v = await judge.judge(ev);
+    expect(v).not.toBeNull();
+    expect(v!.action).toBe("observe");
+    expect(v!.severity).toBe("medium");
+    expect(v!.judgeId).toBe("native:process-tree-anomaly");
+    expect(v!.confidence).toBe(0.8);
+    expect(v!.reason).toMatch(/attribution=external/);
+  });
+
+  it("M11: agent attribution skips process-tree-anomaly", async () => {
+    const judge = createNativeJudge();
+    const ev = createProbeEvent({
+      source: "ebpf",
+      syscall: "openat",
+      pid: 1000,
+      args: { path: "/tmp/file" },
+      meta: { attribution: "agent" },
+    });
+    expect(await judge.judge(ev)).toBeNull();
+  });
+
+  it("M11: descendant attribution skips process-tree-anomaly", async () => {
+    const judge = createNativeJudge();
+    const ev = createProbeEvent({
+      source: "ebpf",
+      syscall: "openat",
+      pid: 2000,
+      args: { path: "/tmp/file" },
+      meta: { attribution: "descendant" },
+    });
+    expect(await judge.judge(ev)).toBeNull();
+  });
+
+  it("M11: fallback to ppid heuristic when no attribution present", async () => {
+    const judge = createNativeJudge({ agentPids: [1000] });
+    // No meta.attribution — falls back to ppid check.
+    const ev = createProbeEvent({
+      source: "ebpf",
+      syscall: "openat",
+      pid: 2000,
+      args: { path: "/tmp/file" },
+      meta: { ppid: 5000 }, // not in agentPids
+    });
+    const v = await judge.judge(ev);
+    expect(v).not.toBeNull();
+    expect(v!.severity).toBe("low"); // lower confidence than attribution path
+    expect(v!.judgeId).toBe("native:process-tree-anomaly");
+  });
 });

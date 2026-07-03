@@ -2,6 +2,9 @@ import {
   startSentinel,
   type SentinelHandle,
   type SentinelOptions,
+  type EventQueueOptions,
+  type AttributionEngineOptions,
+  type SessionEventBufferOptions,
   type Probe,
 } from "./index.js";
 import { createL1BridgeJudge } from "./judges/l1-bridge.js";
@@ -65,7 +68,25 @@ export async function startSentinelRuntime(
   engine: SentinelEngine,
   opts?: SentinelOptions,
 ): Promise<SentinelHandle> {
-  const sentinel = startSentinel(runtime, opts);
+  // Read eventQueue and attribution config and merge into opts
+  let eventQueueCfg: EventQueueOptions | undefined;
+  let attributionCfg: AttributionEngineOptions | undefined;
+  let contextBufferCfg: SessionEventBufferOptions | undefined;
+  try {
+    const config = await runtime.readConfig();
+    eventQueueCfg = readEventQueueConfig(config);
+    attributionCfg = readAttributionConfig(config);
+    contextBufferCfg = readContextConfig(config);
+  } catch {
+    // Config read is optional; defaults will apply.
+  }
+  const sentinelOpts: SentinelOptions = {
+    ...opts,
+    eventQueue: eventQueueCfg ?? opts?.eventQueue,
+    attribution: attributionCfg ?? opts?.attribution,
+    context: { buffer: contextBufferCfg ?? opts?.context?.buffer },
+  };
+  const sentinel = startSentinel(runtime, sentinelOpts);
   sentinel.registerJudge(createL1BridgeJudge(engine));
 
   let nativeCfg: ReturnType<typeof _internalReadNativeJudgeConfig> = {};
@@ -100,6 +121,7 @@ export async function startSentinelRuntime(
             pythonBin: ebpfCfg.pythonBin,
             runnerScript: ebpfCfg.runnerScript,
             runnerBin: ebpfCfg.runnerBin,
+            lifecycle: ebpfCfg.lifecycle,
           }),
         );
       }
@@ -169,6 +191,7 @@ function readEbpfConfig(config: Record<string, unknown>): {
   pythonBin?: string;
   runnerScript?: string;
   runnerBin?: string;
+  lifecycle?: boolean;
 } {
   const probes = (config.probes ?? {}) as Record<string, unknown>;
   const ebpf = (probes.ebpf ?? {}) as Record<string, unknown>;
@@ -176,7 +199,8 @@ function readEbpfConfig(config: Record<string, unknown>): {
   const pythonBin = typeof ebpf.pythonBin === "string" ? ebpf.pythonBin : undefined;
   const runnerScript = typeof ebpf.runnerScript === "string" ? ebpf.runnerScript : undefined;
   const runnerBin = typeof ebpf.runnerBin === "string" ? ebpf.runnerBin : undefined;
-  return { enabled, pythonBin, runnerScript, runnerBin };
+  const lifecycle = ebpf.lifecycle === true ? true : undefined;
+  return { enabled, pythonBin, runnerScript, runnerBin, lifecycle };
 }
 
 function readUprobeConfig(config: Record<string, unknown>): {
@@ -232,6 +256,75 @@ function readLsmConfig(config: Record<string, unknown>): {
     l.minSeverity === "high" || l.minSeverity === "critical" ? l.minSeverity : undefined;
   const socketPath = typeof l.socketPath === "string" ? l.socketPath : undefined;
   return { enabled, runnerBin, policyTtlSeconds, maxEntries, minSeverity, socketPath };
+}
+
+function readEventQueueConfig(config: Record<string, unknown>): EventQueueOptions | undefined {
+  const sentinel = (config.sentinel ?? {}) as Record<string, unknown>;
+  const eq = (sentinel.eventQueue ?? {}) as Record<string, unknown>;
+  const maxDepth = typeof eq.maxDepth === "number" && eq.maxDepth > 0 ? eq.maxDepth : undefined;
+  const sampleRate =
+    typeof eq.sampleRate === "number" && eq.sampleRate >= 0 && eq.sampleRate <= 1
+      ? eq.sampleRate
+      : undefined;
+  if (maxDepth === undefined && sampleRate === undefined) return undefined;
+  const out: EventQueueOptions = {};
+  if (maxDepth !== undefined) out.maxDepth = maxDepth;
+  if (sampleRate !== undefined) out.sampleRate = sampleRate;
+  return out;
+}
+
+function readAttributionConfig(
+  config: Record<string, unknown>,
+): AttributionEngineOptions | undefined {
+  const sentinel = (config.sentinel ?? {}) as Record<string, unknown>;
+  const a = (sentinel.attribution ?? {}) as Record<string, unknown>;
+  const num = (v: unknown, min = 0): number | undefined =>
+    typeof v === "number" && v > min ? v : undefined;
+  const correlationWindowMs = num(a.correlationWindowMs);
+  const causalWindowMs = num(a.causalWindowMs);
+  const maxTreeNodes = num(a.maxTreeNodes);
+  const staleNodeMs = num(a.staleNodeMs);
+  const pruneNodeMs = num(a.pruneNodeMs);
+  const maxCausalPerSession = num(a.maxCausalPerSession);
+  if (
+    correlationWindowMs === undefined &&
+    causalWindowMs === undefined &&
+    maxTreeNodes === undefined &&
+    staleNodeMs === undefined &&
+    pruneNodeMs === undefined &&
+    maxCausalPerSession === undefined
+  ) {
+    return undefined;
+  }
+  const out: AttributionEngineOptions = {};
+  if (correlationWindowMs !== undefined) out.correlationWindowMs = correlationWindowMs;
+  if (causalWindowMs !== undefined) out.causalWindowMs = causalWindowMs;
+  if (maxTreeNodes !== undefined) out.maxTreeNodes = maxTreeNodes;
+  if (staleNodeMs !== undefined) out.staleNodeMs = staleNodeMs;
+  if (pruneNodeMs !== undefined) out.pruneNodeMs = pruneNodeMs;
+  if (maxCausalPerSession !== undefined) out.maxCausalPerSession = maxCausalPerSession;
+  return out;
+}
+
+function readContextConfig(
+  config: Record<string, unknown>,
+): SessionEventBufferOptions | undefined {
+  const sentinel = (config.sentinel ?? {}) as Record<string, unknown>;
+  const ctx = (sentinel.context ?? {}) as Record<string, unknown>;
+  const buf = (ctx.buffer ?? {}) as Record<string, unknown>;
+  const num = (v: unknown, min = 0): number | undefined =>
+    typeof v === "number" && v > min ? v : undefined;
+  const maxPerSession = num(buf.maxPerSession);
+  const maxSessions = num(buf.maxSessions);
+  const sessionTtlMs = num(buf.sessionTtlMs);
+  if (maxPerSession === undefined && maxSessions === undefined && sessionTtlMs === undefined) {
+    return undefined;
+  }
+  const out: SessionEventBufferOptions = {};
+  if (maxPerSession !== undefined) out.maxPerSession = maxPerSession;
+  if (maxSessions !== undefined) out.maxSessions = maxSessions;
+  if (sessionTtlMs !== undefined) out.sessionTtlMs = sessionTtlMs;
+  return out;
 }
 
 /**

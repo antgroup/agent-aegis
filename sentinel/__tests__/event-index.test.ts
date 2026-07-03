@@ -92,4 +92,43 @@ describe("SqliteEventIndex", () => {
     });
     expect(index.query({}).filter((r) => r.id === "dup")).toHaveLength(1);
   });
+
+  it("M11: persists attribution + parentEventId and round-trips them (M11)", () => {
+    index.appendEvent(
+      ev({
+        id: "attr",
+        timestamp: 1000,
+        pid: 2000,
+        meta: { attribution: "descendant", forkChildPid: 2000 },
+        parentEventId: "parent-evt",
+        correlationId: "corr-x",
+      }),
+    );
+    const [row] = index.query({ pid: 2000 });
+    expect(row.attribution).toBe("descendant");
+    expect(row.parentEventId).toBe("parent-evt");
+    expect(row.correlationId).toBe("corr-x");
+  });
+
+  it("M11: filters by attribution / correlationId / parentEventId (M11)", () => {
+    index.appendEvent(ev({ id: "a1", timestamp: 1000, pid: 10, meta: { attribution: "agent" } }));
+    index.appendEvent(ev({ id: "a2", timestamp: 2000, pid: 20, meta: { attribution: "external" }, parentEventId: "p1" }));
+    index.appendEvent(ev({ id: "a3", timestamp: 3000, pid: 30, meta: { attribution: "external" }, correlationId: "c1" }));
+
+    expect(index.query({ attribution: "external" }).map((r) => r.id)).toEqual(["a3", "a2"]);
+    expect(index.query({ attribution: "agent" }).map((r) => r.id)).toEqual(["a1"]);
+    expect(index.query({ parentEventId: "p1" }).map((r) => r.id)).toEqual(["a2"]);
+    expect(index.query({ correlationId: "c1" }).map((r) => r.id)).toEqual(["a3"]);
+  });
+
+  it("M11: migrations are idempotent on a pre-existing DB (reopening index keeps columns)", () => {
+    // First index writes an attribution row, then we close + reopen on the same dir.
+    index.appendEvent(ev({ id: "m1", timestamp: 1000, meta: { attribution: "agent" } }));
+    index.close();
+    const reopened = new SqliteEventIndex({ stateDir: baseDir, now: () => 5000 });
+    expect(reopened.available).toBe(true);
+    // Re-running migrate() must not error on already-present columns.
+    expect(reopened.query({ attribution: "agent" }).map((r) => r.id)).toEqual(["m1"]);
+    reopened.close();
+  });
 });
