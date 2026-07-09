@@ -25,7 +25,12 @@
     "README.md",
     "README_zh.md",
     "LEGAL.md",
-    "LICENSE"
+    "LICENSE",
+    "rpc-handlers.js",
+    "rpc-handlers.d.ts",
+    "rpc-server.js",
+    "rpc-server.d.ts",
+    "adapters/"
   ],
   "openclaw": {
     "extensions": [

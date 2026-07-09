@@ -1,0 +1,73 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["{{INSTALL_DIR}}/adapters/common/hook-runner.mjs", "--agent", "claude"],
+            "timeout": 30,
+            "statusMessage": "Loading AgentAegis"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["{{INSTALL_DIR}}/adapters/common/hook-runner.mjs", "--agent", "claude"],
+            "timeout": 30,
+            "statusMessage": "AgentAegis prompt scan"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["{{INSTALL_DIR}}/adapters/common/hook-runner.mjs", "--agent", "claude"],
+            "timeout": 30,
+            "statusMessage": "AgentAegis tool check"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["{{INSTALL_DIR}}/adapters/common/hook-runner.mjs", "--agent", "claude"],
+            "timeout": 30,
+            "statusMessage": "AgentAegis permission check"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["{{INSTALL_DIR}}/adapters/common/hook-runner.mjs", "--agent", "claude"],
+            "timeout": 30,
+            "statusMessage": "AgentAegis result scan"
+          }
+        ]
+      }
+    ]
+  }
+}
