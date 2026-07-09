@@ -28,6 +28,7 @@ package-lock.json
 # Tests & local verification harness — must NOT be uploaded
 src/__tests__/
 **/__tests__/
+sentinel/bench/
 *.test.ts
 *.spec.ts
 vitest.config.ts
