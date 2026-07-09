@@ -148,7 +148,7 @@ into `~/.codex/hooks.json`.
 
 Restart Codex and open `/hooks` to review/trust the AgentAegis hook definitions
 if prompted. The adapter wires `SessionStart`, `UserPromptSubmit`,
-`PreToolUse`, `PermissionRequest`, and `PostToolUse`.
+`PreToolUse`, `PermissionRequest`, `PostToolUse`, `Stop`, and `SubagentStop`.
 
 ### For Claude Code
 
@@ -167,7 +167,7 @@ The installer builds the engine, copies runtime files to
 and merges hook definitions into `~/.claude/settings.json`.
 
 Restart Claude Code after installation. The adapter wires `SessionStart`,
-`UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, and `PostToolUse`.
+`UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, and `SubagentStop`.
 
 ---
 
@@ -176,7 +176,7 @@ Restart Claude Code after installation. The adapter wires `SessionStart`,
 - **Config changes require a restart.** Long-running runtimes read the defense config only at startup. After editing the config file (`config.yaml` for Hermes/Codex/Claude Code, `openclaw.plugin.json` for OpenClaw) or changing settings in the WebUI, restart the agent. Codex and Claude Code hooks are short-lived commands, so they pick up config edits on the next hook invocation after the agent reloads its hook settings.
 - **`observe` logs, `enforce` blocks.** A defense in `observe` mode records detections but lets the action through; only `enforce` actually blocks. Roll out in `observe`, then promote high-confidence defenses to `enforce`.
 - **Hermes must load plugins to defend.** Use the gateway / interactive chat — `hermes -z` (oneshot) loads no plugins, so no defense runs. On startup the log should report `N high-risk tools wrapped` with N > 0, which is what arms tool-call blocking. Set `approvals.mode: off` to let AgentAegis own blocking.
-- **Codex/Claude Code hook coverage is lifecycle-bound.** The adapters block supported tool calls through `PreToolUse`/`PermissionRequest` and scan outputs through `PostToolUse`; they cannot undo side effects from tools that already completed before a post hook runs.
+- **Codex/Claude Code hook coverage is lifecycle-bound.** The adapters block supported tool calls through `PreToolUse` (plus Codex `PermissionRequest`) and scan outputs through `PostToolUse`; they cannot undo side effects from tools that already completed before a post hook runs.
 
 ---
 

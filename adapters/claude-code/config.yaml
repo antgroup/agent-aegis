@@ -1,0 +1,30 @@
+# AgentAegis configuration for Claude Code.
+# Hook runner automatically protects ~/.claude, ~/.claude/settings.json,
+# the AgentAegis install directory, and its state dir.
+
+allDefensesEnabled: true
+defaultBlockingMode: enforce
+startupSkillScan: false
+
+# --- Individual defense toggles ---
+# selfProtectionEnabled: true
+# selfProtectionMode: enforce
+# commandBlockEnabled: true
+# commandBlockMode: enforce
+# encodingGuardEnabled: true
+# encodingGuardMode: enforce
+# scriptProvenanceGuardEnabled: true
+# memoryGuardEnabled: true
+# userRiskScanEnabled: true
+# skillScanEnabled: true
+# toolResultScanEnabled: true
+# outputRedactionEnabled: true
+# promptGuardEnabled: true
+# loopGuardEnabled: true
+# exfiltrationGuardMode: enforce
+# toolCallEnforcementEnabled: true
+# dispatchGuardEnabled: true
+
+# --- Protected paths (additional) ---
+# protectedPaths:
+#   - /path/to/sensitive/dir

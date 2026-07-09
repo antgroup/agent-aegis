@@ -24,7 +24,9 @@ cp "$REPO_ROOT/package.json" "$INSTALL_DIR/package.json"
 cp "$REPO_ROOT/rpc-handlers.js" "$INSTALL_DIR/rpc-handlers.js"
 cp "$REPO_ROOT/adapters/common/hook-runner.mjs" "$INSTALL_DIR/adapters/common/hook-runner.mjs"
 cp "$REPO_ROOT/src/"*.js "$INSTALL_DIR/src/"
-cp "$REPO_ROOT/adapters/hermes/config.yaml" "$INSTALL_DIR/config.yaml"
+if [ ! -f "$INSTALL_DIR/config.yaml" ]; then
+  cp "$SCRIPT_DIR/config.yaml" "$INSTALL_DIR/config.yaml"
+fi
 
 node "$SCRIPT_DIR/../codex/merge-hooks.mjs" "$SETTINGS_FILE" "$SCRIPT_DIR/settings-hooks.template.json" "$INSTALL_DIR"
 

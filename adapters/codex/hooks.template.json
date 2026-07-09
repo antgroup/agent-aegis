@@ -27,7 +27,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash|apply_patch|Edit|Write|mcp__.*",
+        "matcher": "^Bash$|^apply_patch$|^Edit$|^Write$|^mcp__.*",
         "hooks": [
           {
             "type": "command",
@@ -40,7 +40,7 @@
     ],
     "PermissionRequest": [
       {
-        "matcher": "Bash|apply_patch|Edit|Write|mcp__.*",
+        "matcher": "^Bash$|^apply_patch$|^Edit$|^Write$|^mcp__.*",
         "hooks": [
           {
             "type": "command",
@@ -53,13 +53,37 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|apply_patch|Edit|Write|mcp__.*",
+        "matcher": "^Bash$|^apply_patch$|^Edit$|^Write$|^mcp__.*",
         "hooks": [
           {
             "type": "command",
             "command": "node \"{{INSTALL_DIR}}/adapters/common/hook-runner.mjs\" --agent codex",
             "timeout": 30,
             "statusMessage": "AgentAegis result scan"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"{{INSTALL_DIR}}/adapters/common/hook-runner.mjs\" --agent codex",
+            "timeout": 30,
+            "statusMessage": "AgentAegis session cleanup"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"{{INSTALL_DIR}}/adapters/common/hook-runner.mjs\" --agent codex",
+            "timeout": 30,
+            "statusMessage": "AgentAegis subagent cleanup"
           }
         ]
       }

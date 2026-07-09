@@ -27,6 +27,8 @@ async function main() {
     output = await handlePostToolUse(runtime, agent, eventName, input);
   } else if (eventName === "SessionStart") {
     output = await handleSessionStart(runtime, agent, input);
+  } else if (eventName === "Stop" || eventName === "SubagentStop") {
+    output = handleStop(runtime, agent, eventName, input);
   }
 
   if (output) {
@@ -69,6 +71,7 @@ async function createRuntime(agent, input) {
     agentHome,
     path.join(agentHome, "settings.json"),
     path.join(agentHome, "hooks.json"),
+    path.join(agentHome, "config.toml"),
     stateDir,
     ...splitPathList(process.env.AGENT_AEGIS_PROTECTED_ROOTS),
   ]);
@@ -126,6 +129,7 @@ async function handlePreToolUse(runtime, agent, input) {
 }
 
 async function handlePermissionRequest(runtime, agent, input) {
+  if (agent !== "codex") return null;
   const sessionKey = sessionKeyOf(agent, input);
   const runId = runIdOf(input);
   const { tool, args } = normalizeToolInput(input);
@@ -135,15 +139,12 @@ async function handlePermissionRequest(runtime, agent, input) {
   if (!result.block) return null;
 
   const reason = result.reason ?? "Blocked by AgentAegis policy.";
-  if (agent === "codex") {
-    return {
-      hookSpecificOutput: {
-        hookEventName: "PermissionRequest",
-        decision: { behavior: "deny", message: reason },
-      },
-    };
-  }
-  return denyToolOutput(agent, "PermissionRequest", reason);
+  return {
+    hookSpecificOutput: {
+      hookEventName: "PermissionRequest",
+      decision: { behavior: "deny", message: reason },
+    },
+  };
 }
 
 async function handlePostToolUse(runtime, agent, eventName, input) {
@@ -159,12 +160,6 @@ async function handlePostToolUse(runtime, agent, eventName, input) {
     sessionKey,
     runId,
   });
-  runtime.updateState({
-    method: "note_tool_result",
-    sessionKey,
-    runId,
-    data: { tool, suspicious: result.suspicious, riskFlags: result.riskFlags },
-  });
   if (!result.suspicious && result.riskFlags.length === 0) return null;
 
   const reason = `AgentAegis flagged tool output: ${result.riskFlags.join(", ") || "suspicious content"}`;
@@ -179,13 +174,19 @@ async function handlePostToolUse(runtime, agent, eventName, input) {
     };
   }
   return {
-    decision: "block",
-    reason,
     hookSpecificOutput: {
       hookEventName: eventName,
       additionalContext: reason,
     },
   };
+}
+
+function handleStop(runtime, agent, eventName, input) {
+  runtime.updateState({
+    method: "clear_session",
+    sessionKey: sessionKeyOf(agent, input),
+  });
+  return null;
 }
 
 function contextOutput(agent, eventName, context) {
@@ -227,9 +228,17 @@ function normalizeToolInput(input) {
   if (rawTool === "Bash" || rawTool === "Shell") {
     return { tool: "bash", args: { command: String(toolInput.command ?? "") } };
   }
-  if (rawTool === "apply_patch" || rawTool === "Edit" || rawTool === "Write") {
+  if (
+    rawTool === "apply_patch" ||
+    rawTool === "Edit" ||
+    rawTool === "Write" ||
+    rawTool === "MultiEdit" ||
+    rawTool === "NotebookEdit"
+  ) {
+    const normalizedTool =
+      rawTool === "apply_patch" ? "apply_patch" : rawTool === "Write" ? "write" : "edit";
     return {
-      tool: rawTool === "apply_patch" ? "apply_patch" : rawTool.toLowerCase(),
+      tool: normalizedTool,
       args: { ...toolInput, command: String(toolInput.command ?? toolInput.patch ?? "") },
     };
   }
