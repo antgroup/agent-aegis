@@ -7,6 +7,7 @@ import { AttributionEngine } from "./attribution/engine.js";
 import { SessionEventBuffer } from "./context/buffer.js";
 import { aggregate, runJudges } from "./judges/aggregator.js";
 import { JudgeRegistry } from "./judges/base.js";
+import { ResponsePolicyEngine } from "./response/policy.js";
 /** Interval (ms) between drop-marker writes when events are being lost. */
 const DROP_MARKER_INTERVAL_MS = 60_000;
 /**
@@ -30,6 +31,10 @@ export function startSentinel(runtime, opts = {}) {
     const probes = [];
     const verdictSubscribers = new Set();
     const pendingProcessing = [];
+    const responsePolicy = new ResponsePolicyEngine({
+        capabilities: runtime.capabilities,
+        config: opts.response,
+    });
     // --- Attribution engine (M11) ---
     // Enriches events with attribution, correlationId, and causal flags before
     // they reach the judge pipeline.
@@ -154,7 +159,7 @@ export function startSentinel(runtime, opts = {}) {
         const verdicts = await runJudges(judges, event, (judgeId, err) => {
             logger.warn(`[sentinel] judge ${judgeId} threw: ${String(err)}`);
         });
-        const aggregated = aggregate(verdicts, strategy);
+        const aggregated = responsePolicy.apply(event, aggregate(verdicts, strategy));
         try {
             store.appendVerdict(event.id, aggregated);
         }

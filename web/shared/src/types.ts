@@ -43,6 +43,32 @@ export type ConfigUpdateRequest = Partial<AegisConfig>;
 
 // ---- Sentinel (L2/L3 kernel defense) config ----
 
+export type SentinelBehaviorRuleConfig = {
+  enabled?: boolean;
+  action?: "allow" | "observe" | "block";
+  severity?: "info" | "low" | "medium" | "high" | "critical";
+  confidence?: number;
+  windowMs?: number;
+  thresholds?: Record<string, number>;
+  patterns?: Record<string, string[]>;
+  options?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+export type SentinelResponsePolicyConfig = {
+  enabled: boolean;
+  mode: "off" | "observe" | "enforce";
+  minAlertConfidence: number;
+  minBlockConfidence: number;
+  minKillConfidence: number;
+  blockSeverity: "info" | "low" | "medium" | "high" | "critical";
+  killSeverity: "info" | "low" | "medium" | "high" | "critical";
+  allowKill: boolean;
+  allowThrottle: boolean;
+  allowIsolate: boolean;
+  safeAttributions: string[];
+};
+
 export type SentinelConfig = {
   stateDir: string;
   nativeJudge: {
@@ -54,6 +80,16 @@ export type SentinelConfig = {
     ebpf: { enabled: boolean };
     uprobe: { enabled: boolean };
     lsm: { enabled: boolean; minSeverity: "high" | "critical" };
+  };
+  sentinel: {
+    behaviorJudge: {
+      enabled: boolean;
+      mode: "off" | "observe" | "enforce";
+      minEvents: number;
+      recentCount: number;
+      rules: Record<string, SentinelBehaviorRuleConfig | boolean>;
+    };
+    responsePolicy: SentinelResponsePolicyConfig;
   };
 };
 

@@ -1,6 +1,7 @@
 import { startSentinel, } from "./index.js";
 import { createL1BridgeJudge } from "./judges/l1-bridge.js";
 import { createNativeJudge } from "./judges/native.js";
+import { createBehaviorJudge, } from "./judges/behavior/index.js";
 /**
  * Dynamically import a probe factory by module specifier. The kernel probes
  * are excluded from the OpenClaw plugin package, so the module may not exist —
@@ -29,11 +30,15 @@ export async function startSentinelRuntime(runtime, engine, opts) {
     let eventQueueCfg;
     let attributionCfg;
     let contextBufferCfg;
+    let behaviorJudgeCfg;
+    let responsePolicyCfg;
     try {
         const config = await runtime.readConfig();
         eventQueueCfg = readEventQueueConfig(config);
         attributionCfg = readAttributionConfig(config);
         contextBufferCfg = readContextConfig(config);
+        behaviorJudgeCfg = readBehaviorJudgeConfig(config);
+        responsePolicyCfg = readResponsePolicyConfig(config);
     }
     catch {
         // Config read is optional; defaults will apply.
@@ -43,6 +48,7 @@ export async function startSentinelRuntime(runtime, engine, opts) {
         eventQueue: eventQueueCfg ?? opts?.eventQueue,
         attribution: attributionCfg ?? opts?.attribution,
         context: { buffer: contextBufferCfg ?? opts?.context?.buffer },
+        response: responsePolicyCfg ?? opts?.response,
     };
     const sentinel = startSentinel(runtime, sentinelOpts);
     sentinel.registerJudge(createL1BridgeJudge(engine));
@@ -58,6 +64,12 @@ export async function startSentinelRuntime(runtime, engine, opts) {
         scratchDirPatterns: nativeCfg.scratchDirPatterns,
         mode: nativeCfg.mode,
     }));
+    if (behaviorJudgeCfg?.enabled === true && behaviorJudgeCfg.mode !== "off") {
+        sentinel.registerJudge(createBehaviorJudge({
+            buffer: sentinel.contextBuffer,
+            config: behaviorJudgeCfg,
+        }));
+    }
     try {
         const config = await runtime.readConfig();
         warnIfLegacyFrida(config, runtime.logger);
@@ -224,6 +236,100 @@ function readContextConfig(config) {
         out.maxSessions = maxSessions;
     if (sessionTtlMs !== undefined)
         out.sessionTtlMs = sessionTtlMs;
+    return out;
+}
+function readBehaviorJudgeConfig(config) {
+    const sentinel = (config.sentinel ?? {});
+    const raw = (sentinel.behaviorJudge ?? {});
+    if (Object.keys(raw).length === 0)
+        return undefined;
+    const mode = raw.mode === "off" || raw.mode === "observe" || raw.mode === "enforce"
+        ? raw.mode
+        : undefined;
+    const out = {};
+    if (typeof raw.enabled === "boolean")
+        out.enabled = raw.enabled;
+    if (mode)
+        out.mode = mode;
+    if (typeof raw.minEvents === "number" && raw.minEvents > 0)
+        out.minEvents = raw.minEvents;
+    if (typeof raw.recentCount === "number" && raw.recentCount > 0) {
+        out.recentCount = raw.recentCount;
+    }
+    const rules = readBehaviorRules(raw.rules);
+    if (rules)
+        out.rules = rules;
+    return out;
+}
+function readBehaviorRules(raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+        return undefined;
+    const out = {};
+    for (const [id, value] of Object.entries(raw)) {
+        if (typeof value === "boolean") {
+            out[id] = value;
+            continue;
+        }
+        if (!value || typeof value !== "object" || Array.isArray(value))
+            continue;
+        const src = value;
+        const cfg = {};
+        for (const [k, v] of Object.entries(src)) {
+            if (typeof v === "string" ||
+                typeof v === "number" ||
+                typeof v === "boolean" ||
+                (Array.isArray(v) && v.every((item) => typeof item === "string"))) {
+                cfg[k] = v;
+            }
+            else if (v && typeof v === "object" && !Array.isArray(v)) {
+                cfg[k] = v;
+            }
+        }
+        out[id] = cfg;
+    }
+    return out;
+}
+function readResponsePolicyConfig(config) {
+    const sentinel = (config.sentinel ?? {});
+    const raw = (sentinel.responsePolicy ?? {});
+    if (Object.keys(raw).length === 0)
+        return undefined;
+    const mode = raw.mode === "off" || raw.mode === "observe" || raw.mode === "enforce"
+        ? raw.mode
+        : undefined;
+    const severity = (v) => v === "info" || v === "low" || v === "medium" || v === "high" || v === "critical"
+        ? v
+        : undefined;
+    const num01 = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1 ? v : undefined;
+    const out = {};
+    if (typeof raw.enabled === "boolean")
+        out.enabled = raw.enabled;
+    if (mode)
+        out.mode = mode;
+    const minAlertConfidence = num01(raw.minAlertConfidence);
+    const minBlockConfidence = num01(raw.minBlockConfidence);
+    const minKillConfidence = num01(raw.minKillConfidence);
+    if (minAlertConfidence !== undefined)
+        out.minAlertConfidence = minAlertConfidence;
+    if (minBlockConfidence !== undefined)
+        out.minBlockConfidence = minBlockConfidence;
+    if (minKillConfidence !== undefined)
+        out.minKillConfidence = minKillConfidence;
+    const blockSeverity = severity(raw.blockSeverity);
+    const killSeverity = severity(raw.killSeverity);
+    if (blockSeverity)
+        out.blockSeverity = blockSeverity;
+    if (killSeverity)
+        out.killSeverity = killSeverity;
+    if (typeof raw.allowKill === "boolean")
+        out.allowKill = raw.allowKill;
+    if (typeof raw.allowThrottle === "boolean")
+        out.allowThrottle = raw.allowThrottle;
+    if (typeof raw.allowIsolate === "boolean")
+        out.allowIsolate = raw.allowIsolate;
+    if (Array.isArray(raw.safeAttributions)) {
+        out.safeAttributions = raw.safeAttributions.filter((v) => typeof v === "string");
+    }
     return out;
 }
 /**

@@ -13,6 +13,7 @@ import { SessionEventBuffer, type SessionEventBufferOptions } from "./context/bu
 import { aggregate, runJudges } from "./judges/aggregator.js";
 import { type Judge, JudgeRegistry } from "./judges/base.js";
 import type { Probe, ProbeDeps } from "./probes/types.js";
+import { ResponsePolicyEngine, type ResponsePolicyConfig } from "./response/policy.js";
 import type { AgentRuntime, ToolCallAttempt, VerdictApplication } from "./runtime/types.js";
 
 export type { Judge } from "./judges/base.js";
@@ -22,6 +23,7 @@ export type { ProbeEvent, Verdict, AggregatedVerdict } from "./channel/event.js"
 export type { EventQueueOptions } from "./channel/event-queue.js";
 export type { AttributionEngineOptions } from "./attribution/engine.js";
 export type { SessionEventBufferOptions } from "./context/buffer.js";
+export type { ResponsePolicyConfig } from "./response/policy.js";
 
 export interface SentinelOptions {
   aggregatorStrategy?: AggregatorStrategy;
@@ -31,6 +33,8 @@ export interface SentinelOptions {
   attribution?: AttributionEngineOptions;
   /** Session context pipeline configuration (M11.5). */
   context?: { buffer?: SessionEventBufferOptions };
+  /** Response ladder / policy engine configuration (M13). */
+  response?: ResponsePolicyConfig;
 }
 
 /** Interval (ms) between drop-marker writes when events are being lost. */
@@ -97,6 +101,10 @@ export function startSentinel(
   const probes: Probe[] = [];
   const verdictSubscribers = new Set<(v: AggregatedVerdict) => void>();
   const pendingProcessing: Promise<unknown>[] = [];
+  const responsePolicy = new ResponsePolicyEngine({
+    capabilities: runtime.capabilities,
+    config: opts.response,
+  });
 
   // --- Attribution engine (M11) ---
   // Enriches events with attribution, correlationId, and causal flags before
@@ -224,7 +232,7 @@ export function startSentinel(
     const verdicts = await runJudges(judges, event, (judgeId, err) => {
       logger.warn(`[sentinel] judge ${judgeId} threw: ${String(err)}`);
     });
-    const aggregated = aggregate(verdicts, strategy);
+    const aggregated = responsePolicy.apply(event, aggregate(verdicts, strategy));
     try {
       store.appendVerdict(event.id, aggregated);
     } catch (err) {

@@ -35,8 +35,11 @@
     "sentinel/bootstrap.ts",
     "sentinel/bootstrap.js",
     "sentinel/README.md",
+    "sentinel/attribution/",
     "sentinel/channel/",
+    "sentinel/context/",
     "sentinel/judges/",
+    "sentinel/response/",
     "sentinel/runtime/",
     "sentinel/probes/types.ts",
     "sentinel/probes/types.js"

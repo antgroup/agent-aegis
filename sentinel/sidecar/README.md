@@ -36,11 +36,45 @@ Edit `<install>/config.json` (or use the WebUI Config page → **Kernel Defense
 {
   "stateDir": "/root/.openclaw/plugins/agent-aegis",
   "nativeJudge": { "mode": "observe", "sensitivePaths": ["/etc/shadow"], "scratchDirs": [] },
-  "probes": { "ebpf": { "enabled": true }, "uprobe": { "enabled": false }, "lsm": { "enabled": false, "minSeverity": "high" } }
+  "probes": { "ebpf": { "enabled": true }, "uprobe": { "enabled": false }, "lsm": { "enabled": false, "minSeverity": "high" } },
+  "sentinel": {
+    "behaviorJudge": {
+      "enabled": true,
+      "mode": "observe",
+      "rules": {
+        "sensitive-then-egress": {
+          "minSensitivePathHits": 1,
+          "minExternalConnections": 1,
+          "confidence": 0.8
+        },
+        "process-fanout": { "maxProcessFanout": 12 }
+      }
+    },
+    "responsePolicy": {
+      "enabled": true,
+      "mode": "observe",
+      "minAlertConfidence": 0.6,
+      "minBlockConfidence": 0.8,
+      "allowKill": false,
+      "safeAttributions": ["external", "unknown"]
+    }
+  }
 }
 ```
 
 - `nativeJudge.mode`: `observe` (detect + log + WebUI, never block) or `enforce`.
+- `sentinel.behaviorJudge`: M12 behavior/sequence detection over the session
+  context. It is rule-registry based: each rule can be enabled/disabled and can
+  override `action`, `severity`, `confidence`, and rule-specific thresholds such
+  as `maxProcessFanout`, `maxExternalConnections`, or `minSensitivePathHits`.
+  Start with `mode: "observe"`; `mode: "enforce"` allows configured `block`
+  verdicts but should be promoted only after tuning.
+- `sentinel.responsePolicy`: M13 response ladder. It maps verdict
+  `severity`/`confidence`/`attribution` into a planned response
+  (`observe → alert → throttle → block → kill → isolate`) and records that
+  plan in verdict side effects. In `mode: "observe"`, destructive responses are
+  planned but not applied. `allowKill`/`allowIsolate` default to false and
+  `external`/`unknown` attribution is never killed by default.
 - `ebpf`/`uprobe` are **observe-only**; **`lsm` is the only in-kernel enforce**
   (needs `nativeJudge.mode: enforce` + kernel ≥5.7 + BTF + `bpf` in
   `/sys/kernel/security/lsm`).

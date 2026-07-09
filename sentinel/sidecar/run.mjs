@@ -61,6 +61,9 @@ const { createNoopRuntime } = await import(
 const { createNativeJudge } = await import(
   path.join(SENTINEL_ROOT, "judges/native.js")
 );
+const { createBehaviorJudge } = await import(
+  path.join(SENTINEL_ROOT, "judges/behavior/index.js")
+);
 const { appendWebuiDefenseEvent } = await import(
   path.join(SENTINEL_ROOT, "channel/webui-bridge.js")
 );
@@ -106,7 +109,9 @@ const runtime = createNoopRuntime({
   },
 });
 
-const sentinel = startSentinel(runtime);
+const sentinel = startSentinel(runtime, {
+  response: config.sentinel?.responsePolicy,
+});
 sentinel.registerJudge(
   createNativeJudge({
     mode,
@@ -114,6 +119,15 @@ sentinel.registerJudge(
     scratchDirPatterns: toRegexps(nj.scratchDirs, true),
   }),
 );
+const behaviorJudge = config.sentinel?.behaviorJudge;
+if (behaviorJudge?.enabled === true && behaviorJudge.mode !== "off") {
+  sentinel.registerJudge(
+    createBehaviorJudge({
+      buffer: sentinel.contextBuffer,
+      config: behaviorJudge,
+    }),
+  );
+}
 
 const enabled = [];
 if (probesCfg.ebpf?.enabled) {

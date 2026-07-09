@@ -97,7 +97,14 @@ export interface ProbeEvent {
 export type VerdictSideEffect =
   | { kind: "log"; level: "warn" | "error"; message: string }
   | { kind: "notify_user"; message: string }
-  | { kind: "terminate_process"; pid: number };
+  | { kind: "terminate_process"; pid: number }
+  | {
+      kind: "response_plan";
+      steps: Array<"observe" | "alert" | "throttle" | "block" | "kill" | "isolate">;
+      applied: "observe" | "alert" | "throttle" | "block" | "kill" | "isolate";
+      mode: "observe" | "enforce";
+      reason: string;
+    };
 
 export interface Verdict {
   /** Decision: allow lets execution continue, observe records only, block stops execution. */

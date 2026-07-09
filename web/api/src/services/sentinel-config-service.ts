@@ -59,8 +59,22 @@ export class SentinelConfigService {
     const ebpf = (pr.ebpf ?? {}) as Record<string, unknown>;
     const uprobe = (pr.uprobe ?? {}) as Record<string, unknown>;
     const lsm = (pr.lsm ?? {}) as Record<string, unknown>;
+    const sentinel = (raw.sentinel ?? {}) as Record<string, unknown>;
+    const behaviorJudge = (sentinel.behaviorJudge ?? {}) as Record<string, unknown>;
+    const responsePolicy = (sentinel.responsePolicy ?? {}) as Record<string, unknown>;
     const arr = (v: unknown): string[] =>
       Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+    const num01 = (v: unknown, fallback: number): number =>
+      typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1
+        ? v
+        : fallback;
+    const severity = (
+      v: unknown,
+      fallback: SentinelConfig["sentinel"]["responsePolicy"]["blockSeverity"],
+    ): SentinelConfig["sentinel"]["responsePolicy"]["blockSeverity"] =>
+      v === "info" || v === "low" || v === "medium" || v === "high" || v === "critical"
+        ? v
+        : fallback;
     return {
       stateDir:
         typeof raw.stateDir === "string"
@@ -77,6 +91,69 @@ export class SentinelConfigService {
         lsm: {
           enabled: lsm.enabled === true,
           minSeverity: lsm.minSeverity === "critical" ? "critical" : "high",
+        },
+      },
+      sentinel: {
+        behaviorJudge: {
+          enabled: behaviorJudge.enabled === true,
+          mode:
+            behaviorJudge.mode === "off" ||
+            behaviorJudge.mode === "enforce" ||
+            behaviorJudge.mode === "observe"
+              ? behaviorJudge.mode
+              : SENTINEL_CONFIG_DEFAULTS.sentinel.behaviorJudge.mode,
+          minEvents:
+            typeof behaviorJudge.minEvents === "number"
+              ? behaviorJudge.minEvents
+              : SENTINEL_CONFIG_DEFAULTS.sentinel.behaviorJudge.minEvents,
+          recentCount:
+            typeof behaviorJudge.recentCount === "number"
+              ? behaviorJudge.recentCount
+              : SENTINEL_CONFIG_DEFAULTS.sentinel.behaviorJudge.recentCount,
+          rules:
+            behaviorJudge.rules &&
+            typeof behaviorJudge.rules === "object" &&
+            !Array.isArray(behaviorJudge.rules)
+              ? (behaviorJudge.rules as SentinelConfig["sentinel"]["behaviorJudge"]["rules"])
+              : (SENTINEL_CONFIG_DEFAULTS.sentinel.behaviorJudge
+                  .rules as SentinelConfig["sentinel"]["behaviorJudge"]["rules"]),
+        },
+        responsePolicy: {
+          enabled: responsePolicy.enabled === true,
+          mode:
+            responsePolicy.mode === "off" ||
+            responsePolicy.mode === "enforce" ||
+            responsePolicy.mode === "observe"
+              ? responsePolicy.mode
+              : SENTINEL_CONFIG_DEFAULTS.sentinel.responsePolicy.mode,
+          minAlertConfidence: num01(
+            responsePolicy.minAlertConfidence,
+            SENTINEL_CONFIG_DEFAULTS.sentinel.responsePolicy.minAlertConfidence,
+          ),
+          minBlockConfidence: num01(
+            responsePolicy.minBlockConfidence,
+            SENTINEL_CONFIG_DEFAULTS.sentinel.responsePolicy.minBlockConfidence,
+          ),
+          minKillConfidence: num01(
+            responsePolicy.minKillConfidence,
+            SENTINEL_CONFIG_DEFAULTS.sentinel.responsePolicy.minKillConfidence,
+          ),
+          blockSeverity: severity(
+            responsePolicy.blockSeverity,
+            SENTINEL_CONFIG_DEFAULTS.sentinel.responsePolicy.blockSeverity,
+          ),
+          killSeverity: severity(
+            responsePolicy.killSeverity,
+            SENTINEL_CONFIG_DEFAULTS.sentinel.responsePolicy.killSeverity,
+          ),
+          allowKill: responsePolicy.allowKill === true,
+          allowThrottle: responsePolicy.allowThrottle === true,
+          allowIsolate: responsePolicy.allowIsolate === true,
+          safeAttributions: Array.isArray(responsePolicy.safeAttributions)
+            ? responsePolicy.safeAttributions.filter(
+                (v): v is string => typeof v === "string",
+              )
+            : SENTINEL_CONFIG_DEFAULTS.sentinel.responsePolicy.safeAttributions,
         },
       },
     };

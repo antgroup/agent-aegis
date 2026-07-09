@@ -50,6 +50,80 @@
         "//sessionTtlMs": "Idle session expiry in ms (default 300000 = 5 min).",
         "sessionTtlMs": 300000
       }
+    },
+    "behaviorJudge": {
+      "//": "M12: configurable behavior/sequence detection over the session context. Defaults should start in observe mode.",
+      "enabled": true,
+      "mode": "observe",
+      "minEvents": 1,
+      "recentCount": 30,
+      "rules": {
+        "causal-exfil": {
+          "enabled": true,
+          "action": "observe",
+          "severity": "high",
+          "confidence": 0.85
+        },
+        "sensitive-then-egress": {
+          "enabled": true,
+          "windowMs": 60000,
+          "minSensitivePathHits": 1,
+          "minExternalConnections": 1,
+          "action": "observe",
+          "severity": "high",
+          "confidence": 0.8
+        },
+        "process-fanout": {
+          "enabled": true,
+          "maxProcessFanout": 12,
+          "action": "observe",
+          "severity": "medium",
+          "confidence": 0.7
+        },
+        "unusual-egress": {
+          "enabled": true,
+          "maxExternalConnections": 5,
+          "action": "observe",
+          "severity": "medium",
+          "confidence": 0.65
+        },
+        "unexpected-binary": {
+          "enabled": true,
+          "binaryPatterns": ["(^|/)curl$", "(^|/)wget$", "(^|/)nc$", "(^|/)nmap$"],
+          "action": "observe",
+          "severity": "medium",
+          "confidence": 0.65
+        },
+        "persistence-path": {
+          "enabled": true,
+          "pathPatterns": ["(^|/)\\.ssh/authorized_keys$", "/etc/cron\\.d/", "/systemd/system/"],
+          "action": "observe",
+          "severity": "high",
+          "confidence": 0.75
+        },
+        "lateral-movement": {
+          "enabled": true,
+          "minDistinctInternalHosts": 3,
+          "windowMs": 60000,
+          "action": "observe",
+          "severity": "medium",
+          "confidence": 0.7
+        }
+      }
+    },
+    "responsePolicy": {
+      "//": "M13: response ladder + policy engine. Default to observe; promote to enforce only after tuning.",
+      "enabled": true,
+      "mode": "observe",
+      "minAlertConfidence": 0.6,
+      "minBlockConfidence": 0.8,
+      "minKillConfidence": 0.95,
+      "blockSeverity": "high",
+      "killSeverity": "critical",
+      "allowKill": false,
+      "allowThrottle": false,
+      "allowIsolate": false,
+      "safeAttributions": ["external", "unknown"]
     }
   }
 }

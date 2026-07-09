@@ -182,7 +182,25 @@ export const DEFENSE_GROUPS: DefenseGroupMeta[] = [
 // install dir (e.g. ~/.openclaw/agent-aegis-sentinel/config.json).
 
 const sentinelModeSchema = z.enum(["observe", "enforce"]);
+const behaviorModeSchema = z.enum(["off", "observe", "enforce"]);
+const responsePolicyModeSchema = z.enum(["off", "observe", "enforce"]);
+const verdictActionSchema = z.enum(["allow", "observe", "block"]);
+const verdictSeveritySchema = z.enum(["info", "low", "medium", "high", "critical"]);
 const minSeveritySchema = z.enum(["high", "critical"]);
+const confidenceSchema = z.number().min(0).max(1);
+
+const behaviorRuleConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    action: verdictActionSchema.optional(),
+    severity: verdictSeveritySchema.optional(),
+    confidence: z.number().optional(),
+    windowMs: z.number().optional(),
+    thresholds: z.record(z.number()).optional(),
+    patterns: z.record(z.array(z.string())).optional(),
+    options: z.record(z.unknown()).optional(),
+  })
+  .catchall(z.unknown());
 
 export const sentinelConfigSchema = z.object({
   stateDir: z.string().optional(),
@@ -205,6 +223,37 @@ export const sentinelConfigSchema = z.object({
         .optional(),
     })
     .optional(),
+  sentinel: z
+    .object({
+      behaviorJudge: z
+        .object({
+          enabled: z.boolean().optional(),
+          mode: behaviorModeSchema.optional(),
+          minEvents: z.number().optional(),
+          recentCount: z.number().optional(),
+          rules: z
+            .record(z.union([z.boolean(), behaviorRuleConfigSchema]))
+            .optional(),
+        })
+        .optional(),
+      responsePolicy: z
+        .object({
+          enabled: z.boolean().optional(),
+          mode: responsePolicyModeSchema.optional(),
+          minAlertConfidence: confidenceSchema.optional(),
+          minBlockConfidence: confidenceSchema.optional(),
+          minKillConfidence: confidenceSchema.optional(),
+          blockSeverity: verdictSeveritySchema.optional(),
+          killSeverity: verdictSeveritySchema.optional(),
+          allowKill: z.boolean().optional(),
+          allowThrottle: z.boolean().optional(),
+          allowIsolate: z.boolean().optional(),
+          safeAttributions: z.array(z.string()).optional(),
+        })
+        .optional(),
+    })
+    .catchall(z.unknown())
+    .optional(),
 });
 
 export type SentinelConfigPartial = z.infer<typeof sentinelConfigSchema>;
@@ -220,5 +269,27 @@ export const SENTINEL_CONFIG_DEFAULTS = {
     ebpf: { enabled: false },
     uprobe: { enabled: false },
     lsm: { enabled: false, minSeverity: "high" as const },
+  },
+  sentinel: {
+    behaviorJudge: {
+      enabled: false,
+      mode: "observe" as const,
+      minEvents: 1,
+      recentCount: 30,
+      rules: {} as Record<string, unknown>,
+    },
+    responsePolicy: {
+      enabled: false,
+      mode: "observe" as const,
+      minAlertConfidence: 0.6,
+      minBlockConfidence: 0.8,
+      minKillConfidence: 0.95,
+      blockSeverity: "high" as const,
+      killSeverity: "critical" as const,
+      allowKill: false,
+      allowThrottle: false,
+      allowIsolate: false,
+      safeAttributions: ["external", "unknown"] as string[],
+    },
   },
 };
