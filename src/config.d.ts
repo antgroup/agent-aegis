@@ -21,6 +21,7 @@ export declare const SKILL_SCAN_TARGET_FILENAME = "SKILL.md";
 export declare const SKILL_SCAN_ALLOWED_EXTENSIONS: string[];
 export declare const TRUSTED_SKILLS_FILENAME = "trusted-skills.json";
 export declare const SELF_INTEGRITY_FILENAME = "self-integrity.json";
+export declare const RUNTIME_STATE_FILENAME = "runtime-state.json";
 export declare const DEFENSE_EVENTS_FILENAME = "defense-events.jsonl";
 export declare const SKILL_SCAN_EVENTS_FILENAME = "skill-scan-events.jsonl";
 export declare const BLOCK_REASON_PROTECTED_PATH = "\u5B89\u5168\u9650\u5236\uFF1A\u7981\u6B62\u8BBF\u95EE\u3001\u67E5\u8BE2\u3001\u4FEE\u6539\u3001\u5220\u9664\u3001\u5173\u95ED\u6216\u7ED5\u8FC7\u53D7\u4FDD\u62A4\u7684\u654F\u611F\u8DEF\u5F84\u3001\u914D\u7F6E\u3001\u91CD\u8981 skill \u6216 agent-aegis \u63D2\u4EF6\u76EE\u5F55\u3002";

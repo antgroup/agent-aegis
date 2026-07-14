@@ -73,6 +73,13 @@ export class AegisRpcRuntime {
         const turnState = params.sessionKey ? this.engine.state.peekPromptState(params.sessionKey) : undefined;
         return { riskFlags: turnState?.userRiskFlags ?? [] };
     }
+    checkDispatch(params) {
+        this.ensureInit();
+        const result = this.engine.checkDispatch(params.content, params.sessionKey, params.hookName);
+        return result?.block
+            ? { block: true, reason: result.reason, text: result.text }
+            : { block: false };
+    }
     async getPromptGuard(params) {
         this.ensureInit();
         const context = await this.engine.buildPromptContext(undefined, params.sessionKey);
@@ -100,6 +107,11 @@ export class AegisRpcRuntime {
             riskFlags: turnState?.toolResultRiskFlags ?? [],
             suspicious: turnState?.toolResultSuspicious ?? false,
         };
+    }
+    trackToolCallResult(params) {
+        this.ensureInit();
+        this.engine.trackToolCallResult(params.tool, params.args, params.error, params.runId, params.sessionKey);
+        return { ok: true };
     }
     checkLlmOutput(params) {
         this.ensureInit();
@@ -151,6 +163,9 @@ export class AegisRpcRuntime {
                 case "check_user_input":
                     result = this.checkUserInput(params);
                     break;
+                case "check_dispatch":
+                    result = this.checkDispatch(params);
+                    break;
                 case "get_prompt_guard":
                     result = await this.getPromptGuard(params);
                     break;
@@ -159,6 +174,9 @@ export class AegisRpcRuntime {
                     break;
                 case "check_tool_result":
                     result = this.checkToolResult(params);
+                    break;
+                case "track_tool_call_result":
+                    result = this.trackToolCallResult(params);
                     break;
                 case "check_llm_output":
                     result = this.checkLlmOutput(params);

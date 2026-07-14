@@ -1,7 +1,15 @@
 import { promises as fs } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import {
   LOOP_GUARD_TTL_MS,
+  RUNTIME_STATE_FILENAME,
   SELF_INTEGRITY_FILENAME,
   TRUSTED_SKILLS_FILENAME,
   TURN_STATE_TTL_MS,
@@ -30,6 +38,18 @@ type PersistedTrustedSkillsFile = {
 
 type ObservedSecretEntry = {
   values: string[];
+  updatedAt: number;
+};
+
+type PersistedRuntimeStateFile = {
+  version: 1;
+  turnStates: [string, TurnSecurityState][];
+  loopCounters: [string, LoopCounterEntry][];
+  sessionSecrets: [string, ObservedSecretEntry][];
+  sessionPrompts: [string, PromptSnapshot][];
+  lastUserInputs: [string, { value: string; updatedAt: number }][];
+  runToolCalls: [string, RunToolCallState][];
+  runSecuritySignals: [string, RunSecuritySignalState][];
   updatedAt: number;
 };
 
@@ -78,6 +98,38 @@ async function atomicWriteJson(filePath: string, value: unknown): Promise<void> 
   } finally {
     await fs.rm(tempPath, { force: true }).catch(() => undefined);
   }
+}
+
+function atomicWriteJsonSync(filePath: string, value: unknown): void {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    writeFileSync(tempPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    renameSync(tempPath, filePath);
+  } finally {
+    rmSync(tempPath, { force: true });
+  }
+}
+
+function readJsonFileSync<T>(filePath: string): T | null {
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8")) as T;
+  } catch {
+    return null;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function runtimeEntries<T>(value: unknown): [string, T][] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((entry): entry is [string, T] => {
+    return Array.isArray(entry) && typeof entry[0] === "string" && isRecord(entry[1]);
+  });
 }
 
 function normalizeTrustedSkillsFile(raw: unknown): PersistedTrustedSkillsFile {
@@ -131,6 +183,21 @@ function normalizeSelfIntegrityRecord(raw: unknown): SelfIntegrityRecord | null 
   };
 }
 
+function normalizeRuntimeStateFile(raw: unknown): PersistedRuntimeStateFile {
+  const record = isRecord(raw) ? raw : {};
+  return {
+    version: 1,
+    turnStates: runtimeEntries<TurnSecurityState>(record.turnStates),
+    loopCounters: runtimeEntries<LoopCounterEntry>(record.loopCounters),
+    sessionSecrets: runtimeEntries<ObservedSecretEntry>(record.sessionSecrets),
+    sessionPrompts: runtimeEntries<PromptSnapshot>(record.sessionPrompts),
+    lastUserInputs: runtimeEntries<{ value: string; updatedAt: number }>(record.lastUserInputs),
+    runToolCalls: runtimeEntries<RunToolCallState>(record.runToolCalls),
+    runSecuritySignals: runtimeEntries<RunSecuritySignalState>(record.runSecuritySignals),
+    updatedAt: typeof record.updatedAt === "number" ? record.updatedAt : 0,
+  };
+}
+
 export class AgentAegisState {
   private readonly turnStates = new Map<string, TurnSecurityState>();
   private readonly loopCounters = new Map<string, LoopCounterEntry>();
@@ -167,6 +234,64 @@ export class AgentAegisState {
 
   private getSelfIntegrityPath(): string {
     return path.join(this.params.stateDir, SELF_INTEGRITY_FILENAME);
+  }
+
+  private getRuntimeStatePath(): string {
+    return path.join(this.params.stateDir, RUNTIME_STATE_FILENAME);
+  }
+
+  private persistRuntimeState(): void {
+    try {
+      this.cleanupExpiredState(this.now());
+      atomicWriteJsonSync(this.getRuntimeStatePath(), {
+        version: 1,
+        turnStates: [...this.turnStates.entries()],
+        loopCounters: [...this.loopCounters.entries()],
+        sessionSecrets: [...this.sessionSecrets.entries()],
+        sessionPrompts: [...this.sessionPrompts.entries()],
+        lastUserInputs: [...this.lastUserInputs.entries()],
+        runToolCalls: [...this.runToolCalls.entries()],
+        runSecuritySignals: [...this.runSecuritySignals.entries()],
+        updatedAt: this.now(),
+      } satisfies PersistedRuntimeStateFile);
+    } catch (error) {
+      this.params.logger.debug?.("agent-aegis: runtime state persist failed", {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private restoreRuntimeState(raw: unknown): void {
+    const state = normalizeRuntimeStateFile(raw);
+    this.turnStates.clear();
+    for (const [key, value] of state.turnStates) {
+      this.turnStates.set(key, value);
+    }
+    this.loopCounters.clear();
+    for (const [key, value] of state.loopCounters) {
+      this.loopCounters.set(key, value);
+    }
+    this.sessionSecrets.clear();
+    for (const [key, value] of state.sessionSecrets) {
+      this.sessionSecrets.set(key, value);
+    }
+    this.sessionPrompts.clear();
+    for (const [key, value] of state.sessionPrompts) {
+      this.sessionPrompts.set(key, value);
+    }
+    this.lastUserInputs.clear();
+    for (const [key, value] of state.lastUserInputs) {
+      this.lastUserInputs.set(key, value);
+    }
+    this.runToolCalls.clear();
+    for (const [key, value] of state.runToolCalls) {
+      this.runToolCalls.set(key, value);
+    }
+    this.runSecuritySignals.clear();
+    for (const [key, value] of state.runSecuritySignals) {
+      this.runSecuritySignals.set(key, value);
+    }
+    this.cleanupExpiredState(this.now());
   }
 
   private cleanupExpiredState(now = this.now()): void {
@@ -212,6 +337,9 @@ export class AgentAegisState {
       readJsonFile<PersistedTrustedSkillsFile>(this.getTrustedSkillsPath()),
       readJsonFile<SelfIntegrityRecord>(this.getSelfIntegrityPath()),
     ]);
+    const runtimeStateFile = readJsonFileSync<PersistedRuntimeStateFile>(
+      this.getRuntimeStatePath(),
+    );
 
     const trustedSkills = normalizeTrustedSkillsFile(trustedSkillsFile);
     this.trustedSkills.clear();
@@ -220,6 +348,7 @@ export class AgentAegisState {
     }
 
     this.selfIntegrityRecord = normalizeSelfIntegrityRecord(selfIntegrityFile);
+    this.restoreRuntimeState(runtimeStateFile);
   }
 
   async persistTrustedSkills(): Promise<void> {
@@ -323,6 +452,7 @@ export class AgentAegisState {
     current.prependNeeded = current.prependNeeded || current.userRiskFlags.length > 0;
     current.updatedAt = now;
     this.turnStates.set(sessionKey, current);
+    this.persistRuntimeState();
     return current;
   }
 
@@ -340,6 +470,7 @@ export class AgentAegisState {
     current.prependNeeded = current.prependNeeded || current.hasToolResult;
     current.updatedAt = now;
     this.turnStates.set(sessionKey, current);
+    this.persistRuntimeState();
     return current;
   }
 
@@ -358,6 +489,7 @@ export class AgentAegisState {
     current.prependNeeded = current.prependNeeded || current.riskySkills.length > 0;
     current.updatedAt = now;
     this.turnStates.set(sessionKey, current);
+    this.persistRuntimeState();
     return current;
   }
 
@@ -369,6 +501,7 @@ export class AgentAegisState {
     current.prependNeeded = current.prependNeeded || current.runtimeRiskFlags.length > 0;
     current.updatedAt = now;
     this.turnStates.set(sessionKey, current);
+    this.persistRuntimeState();
     return current;
   }
 
@@ -392,6 +525,7 @@ export class AgentAegisState {
       values: nextValues,
       updatedAt: now,
     });
+    this.persistRuntimeState();
     return [...nextValues];
   }
 
@@ -414,6 +548,7 @@ export class AgentAegisState {
       updatedAt: now,
     } satisfies PromptSnapshot;
     this.sessionPrompts.set(sessionKey, next);
+    this.persistRuntimeState();
     return { ...next };
   }
 
@@ -435,6 +570,7 @@ export class AgentAegisState {
       value: content.slice(0, 500),
       updatedAt: now,
     });
+    this.persistRuntimeState();
   }
 
   peekLastUserInput(sessionKey: string): string | undefined {
@@ -456,6 +592,7 @@ export class AgentAegisState {
       updatedAt: now,
     };
     this.runToolCalls.set(runId, nextEntry);
+    this.persistRuntimeState();
     return nextEntry.calls.length;
   }
 
@@ -510,6 +647,7 @@ export class AgentAegisState {
       ...(params.runtimeRiskFlags ?? []),
     ]);
     state.updatedAt = now;
+    this.persistRuntimeState();
     return {
       ...state,
       sourceSignals: [...state.sourceSignals],
@@ -545,6 +683,7 @@ export class AgentAegisState {
       left.hash.localeCompare(right.hash),
     );
     state.updatedAt = now;
+    this.persistRuntimeState();
     return this.peekRunSecurityState(runId) ?? state;
   }
 
@@ -573,6 +712,7 @@ export class AgentAegisState {
       left.path.localeCompare(right.path),
     );
     state.updatedAt = now;
+    this.persistRuntimeState();
     return this.peekRunSecurityState(runId) ?? state;
   }
 
@@ -614,10 +754,12 @@ export class AgentAegisState {
 
   clearRunToolCalls(runId: string): void {
     this.runToolCalls.delete(runId);
+    this.persistRuntimeState();
   }
 
   clearRunSecurityState(runId: string): void {
     this.runSecuritySignals.delete(runId);
+    this.persistRuntimeState();
   }
 
   clearSessionRuntimeState(sessionKey: string): void {
@@ -639,6 +781,7 @@ export class AgentAegisState {
         this.runSecuritySignals.delete(runId);
       }
     }
+    this.persistRuntimeState();
   }
 
   markToolResultSeen(sessionKey: string): TurnSecurityState {
@@ -658,6 +801,7 @@ export class AgentAegisState {
       return undefined;
     }
     this.turnStates.delete(sessionKey);
+    this.persistRuntimeState();
     return state;
   }
 
@@ -677,6 +821,7 @@ export class AgentAegisState {
       count: nextCount,
       updatedAt: now,
     });
+    this.persistRuntimeState();
     return nextCount;
   }
 

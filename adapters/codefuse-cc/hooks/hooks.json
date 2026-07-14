@@ -1,0 +1,86 @@
+{
+  "description": "AgentAegis hooks for CodeFuse CC",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AGENT_AEGIS_HOME=\"$HOME/.codefuse/agent-aegis\" AGENT_AEGIS_STATE_DIR=\"$HOME/.codefuse/agent-aegis-state\" AGENT_AEGIS_CONFIG=\"$HOME/.codefuse/agent-aegis/config.yaml\" node \"${CLAUDE_PLUGIN_ROOT}/adapters/common/hook-runner.mjs\" --agent codefuse-cc",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AGENT_AEGIS_HOME=\"$HOME/.codefuse/agent-aegis\" AGENT_AEGIS_STATE_DIR=\"$HOME/.codefuse/agent-aegis-state\" AGENT_AEGIS_CONFIG=\"$HOME/.codefuse/agent-aegis/config.yaml\" node \"${CLAUDE_PLUGIN_ROOT}/adapters/common/hook-runner.mjs\" --agent codefuse-cc",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$|^Edit$|^Write$|^MultiEdit$|^NotebookEdit$|^mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AGENT_AEGIS_HOME=\"$HOME/.codefuse/agent-aegis\" AGENT_AEGIS_STATE_DIR=\"$HOME/.codefuse/agent-aegis-state\" AGENT_AEGIS_CONFIG=\"$HOME/.codefuse/agent-aegis/config.yaml\" node \"${CLAUDE_PLUGIN_ROOT}/adapters/common/hook-runner.mjs\" --agent codefuse-cc",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^Bash$|^Edit$|^Write$|^MultiEdit$|^NotebookEdit$|^mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AGENT_AEGIS_HOME=\"$HOME/.codefuse/agent-aegis\" AGENT_AEGIS_STATE_DIR=\"$HOME/.codefuse/agent-aegis-state\" AGENT_AEGIS_CONFIG=\"$HOME/.codefuse/agent-aegis/config.yaml\" node \"${CLAUDE_PLUGIN_ROOT}/adapters/common/hook-runner.mjs\" --agent codefuse-cc",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "^Bash$|^Edit$|^Write$|^MultiEdit$|^NotebookEdit$|^mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AGENT_AEGIS_HOME=\"$HOME/.codefuse/agent-aegis\" AGENT_AEGIS_STATE_DIR=\"$HOME/.codefuse/agent-aegis-state\" AGENT_AEGIS_CONFIG=\"$HOME/.codefuse/agent-aegis/config.yaml\" node \"${CLAUDE_PLUGIN_ROOT}/adapters/common/hook-runner.mjs\" --agent codefuse-cc",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AGENT_AEGIS_HOME=\"$HOME/.codefuse/agent-aegis\" AGENT_AEGIS_STATE_DIR=\"$HOME/.codefuse/agent-aegis-state\" AGENT_AEGIS_CONFIG=\"$HOME/.codefuse/agent-aegis/config.yaml\" node \"${CLAUDE_PLUGIN_ROOT}/adapters/common/hook-runner.mjs\" --agent codefuse-cc",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AGENT_AEGIS_HOME=\"$HOME/.codefuse/agent-aegis\" AGENT_AEGIS_STATE_DIR=\"$HOME/.codefuse/agent-aegis-state\" AGENT_AEGIS_CONFIG=\"$HOME/.codefuse/agent-aegis/config.yaml\" node \"${CLAUDE_PLUGIN_ROOT}/adapters/common/hook-runner.mjs\" --agent codefuse-cc",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

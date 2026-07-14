@@ -1,0 +1,8 @@
+{
+  "name": "agent-aegis-codefuse",
+  "version": "2026.3.14",
+  "description": "AgentAegis runtime safety hooks for CodeFuse CC",
+  "author": {
+    "name": "Ant Group"
+  }
+}

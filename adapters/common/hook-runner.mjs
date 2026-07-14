@@ -34,12 +34,12 @@ async function main() {
   if (output) {
     process.stdout.write(`${JSON.stringify(output)}\n`);
   }
-  process.exit(0);
+  process.exitCode = 0;
 }
 
 async function createRuntime(agent, input) {
   const pluginRoot = resolvePluginRoot();
-  const agentHome = path.join(os.homedir(), agent === "claude" ? ".claude" : ".codex");
+  const agentHome = resolveAgentHome(agent);
   const installRoot =
     process.env.AGENT_AEGIS_HOME ??
     process.env.PLUGIN_ROOT ??
@@ -87,6 +87,14 @@ async function createRuntime(agent, input) {
   return runtime;
 }
 
+function resolveAgentHome(agent) {
+  if (agent === "claude") return path.join(os.homedir(), ".claude");
+  if (agent === "codefuse-cc") {
+    return process.env.CODEFUSE_CC_HOME ?? path.join(os.homedir(), ".codefuse", "engine", "cc");
+  }
+  return path.join(os.homedir(), ".codex");
+}
+
 async function handleSessionStart(runtime, agent, input) {
   const sessionKey = sessionKeyOf(agent, input);
   const guard = await runtime.getPromptGuard({ sessionKey });
@@ -104,6 +112,18 @@ async function handleUserPrompt(runtime, agent, input) {
       sessionKey,
       data: { content: prompt.slice(0, 500) },
     });
+    const dispatch = runtime.checkDispatch({
+      content: prompt,
+      sessionKey,
+      hookName: "UserPromptSubmit",
+    });
+    if (dispatch.block) {
+      return blockPromptOutput(
+        "UserPromptSubmit",
+        dispatch.reason ?? "Blocked by AgentAegis dispatch guard.",
+        dispatch.text,
+      );
+    }
   }
   const guard = await runtime.getPromptGuard({ sessionKey });
   if (!guard.context) return null;
@@ -152,6 +172,19 @@ async function handlePostToolUse(runtime, agent, eventName, input) {
   const runId = runIdOf(input);
   const { tool, args } = normalizeToolInput(input);
   if (!tool) return null;
+
+  const error =
+    eventName === "PostToolUseFailure"
+      ? stringifyForScan(input.error ?? input.tool_error ?? input.tool_response ?? input.tool_output ?? input.result) ||
+        "tool failed"
+      : undefined;
+  runtime.trackToolCallResult({
+    tool,
+    args,
+    error,
+    sessionKey,
+    runId,
+  });
 
   const result = runtime.checkToolResult({
     tool,
@@ -212,6 +245,17 @@ function denyToolOutput(agent, eventName, reason) {
       hookEventName: eventName,
       permissionDecision: "deny",
       permissionDecisionReason: reason,
+    },
+  };
+}
+
+function blockPromptOutput(eventName, reason, context) {
+  return {
+    decision: "block",
+    reason,
+    hookSpecificOutput: {
+      hookEventName: eventName,
+      additionalContext: context ?? reason,
     },
   };
 }
@@ -353,5 +397,5 @@ function isRecord(value) {
 
 main().catch((err) => {
   console.error(`[AgentAegis] hook failed open: ${err instanceof Error ? err.message : String(err)}`);
-  process.exit(0);
+  process.exitCode = 0;
 });

@@ -21,6 +21,9 @@ export declare class AgentAegisState {
     private now;
     private getTrustedSkillsPath;
     private getSelfIntegrityPath;
+    private getRuntimeStatePath;
+    private persistRuntimeState;
+    private restoreRuntimeState;
     private cleanupExpiredState;
     loadPersistentState(): Promise<void>;
     persistTrustedSkills(): Promise<void>;

@@ -123,6 +123,18 @@ export class AegisRpcRuntime {
     return { riskFlags: turnState?.userRiskFlags ?? [] };
   }
 
+  checkDispatch(params: {
+    content: string;
+    sessionKey?: string;
+    hookName?: string;
+  }): { block: boolean; reason?: string; text?: string } {
+    this.ensureInit();
+    const result = this.engine.checkDispatch(params.content, params.sessionKey, params.hookName);
+    return result?.block
+      ? { block: true, reason: result.reason, text: result.text }
+      : { block: false };
+  }
+
   async getPromptGuard(params: {
     sessionKey?: string;
   }): Promise<{ context: string | null }> {
@@ -161,6 +173,24 @@ export class AegisRpcRuntime {
       riskFlags: turnState?.toolResultRiskFlags ?? [],
       suspicious: turnState?.toolResultSuspicious ?? false,
     };
+  }
+
+  trackToolCallResult(params: {
+    tool: string;
+    args: Record<string, unknown>;
+    error?: string;
+    sessionKey?: string;
+    runId?: string;
+  }): { ok: true } {
+    this.ensureInit();
+    this.engine.trackToolCallResult(
+      params.tool,
+      params.args,
+      params.error,
+      params.runId,
+      params.sessionKey,
+    );
+    return { ok: true };
   }
 
   checkLlmOutput(params: {
@@ -230,6 +260,9 @@ export class AegisRpcRuntime {
         case "check_user_input":
           result = this.checkUserInput(params as any);
           break;
+        case "check_dispatch":
+          result = this.checkDispatch(params as any);
+          break;
         case "get_prompt_guard":
           result = await this.getPromptGuard(params as any);
           break;
@@ -238,6 +271,9 @@ export class AegisRpcRuntime {
           break;
         case "check_tool_result":
           result = this.checkToolResult(params as any);
+          break;
+        case "track_tool_call_result":
+          result = this.trackToolCallResult(params as any);
           break;
         case "check_llm_output":
           result = this.checkLlmOutput(params as any);

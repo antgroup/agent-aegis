@@ -46,6 +46,15 @@ export declare class AegisRpcRuntime {
     }): {
         riskFlags: string[];
     };
+    checkDispatch(params: {
+        content: string;
+        sessionKey?: string;
+        hookName?: string;
+    }): {
+        block: boolean;
+        reason?: string;
+        text?: string;
+    };
     getPromptGuard(params: {
         sessionKey?: string;
     }): Promise<{
@@ -66,6 +75,15 @@ export declare class AegisRpcRuntime {
     }): {
         riskFlags: string[];
         suspicious: boolean;
+    };
+    trackToolCallResult(params: {
+        tool: string;
+        args: Record<string, unknown>;
+        error?: string;
+        sessionKey?: string;
+        runId?: string;
+    }): {
+        ok: true;
     };
     checkLlmOutput(params: {
         texts: string[];

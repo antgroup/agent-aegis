@@ -1,0 +1,14 @@
+{
+  "name": "agent-aegis-local",
+  "description": "Local AgentAegis adapter marketplace",
+  "owner": {
+    "name": "Ant Group"
+  },
+  "plugins": [
+    {
+      "name": "agent-aegis-codefuse",
+      "description": "AgentAegis runtime safety hooks for CodeFuse CC",
+      "source": "."
+    }
+  ]
+}

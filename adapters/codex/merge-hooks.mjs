@@ -47,7 +47,20 @@ function groupKey(group) {
   const matcher = group.matcher ?? "";
   const hooks = Array.isArray(group.hooks) ? group.hooks : [];
   const commandKey = hooks
-    .map((hook) => `${hook.command ?? ""} ${(hook.args ?? []).join(" ")}`)
+    .map((hook) => `${hook.type ?? ""}:${normalizeCommandKey(hook.command ?? "", hook.args ?? [])}`)
     .join("|");
-  return `${matcher}::${commandKey.includes("agent-aegis") ? "agent-aegis" : commandKey}`;
+  return `${matcher}::${commandKey}`;
+}
+
+function normalizeCommandKey(command, args) {
+  const raw = `${command} ${args.join(" ")}`.trim();
+  return raw
+    .replace(
+      /node\s+"[^"]*\/adapters\/common\/hook-runner\.mjs"/g,
+      'node "agent-aegis/adapters/common/hook-runner.mjs"',
+    )
+    .replace(
+      /node\s+\S*\/adapters\/common\/hook-runner\.mjs/g,
+      "node agent-aegis/adapters/common/hook-runner.mjs",
+    );
 }

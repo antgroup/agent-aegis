@@ -169,14 +169,36 @@ and merges hook definitions into `~/.claude/settings.json`.
 Restart Claude Code after installation. The adapter wires `SessionStart`,
 `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Stop`, and `SubagentStop`.
 
+### For CodeFuse CC
+
+**Prerequisites:** Node.js >= 20 and CodeFuse CLI with the CC engine.
+
+Install AgentAegis as a persistent CodeFuse CC plugin:
+
+```bash
+git clone https://github.com/antgroup/AgentAegis.git
+cd AgentAegis
+bash adapters/codefuse-cc/install.sh
+```
+
+The installer builds the engine, stages a Claude-compatible plugin under
+`~/.codefuse/agent-aegis-plugin`, stores configuration and state under
+`~/.codefuse/agent-aegis` and `~/.codefuse/agent-aegis-state`, and registers
+`agent-aegis-codefuse@agent-aegis-local` with the CC plugin manager.
+
+Start a new `cfuse --cc` session after installation. Unlike the direct Claude
+Code adapter, this adapter does not merge hooks into CodeFuse settings because
+CodeFuse generates a runtime `--settings` payload. Plugin hooks survive that
+generation step and load on normal `cfuse --cc` invocations.
+
 ---
 
 ## ⚠️ Operational notes
 
-- **Config changes require a restart.** Long-running runtimes read the defense config only at startup. After editing the config file (`config.yaml` for Hermes/Codex/Claude Code, `openclaw.plugin.json` for OpenClaw) or changing settings in the WebUI, restart the agent. Codex and Claude Code hooks are short-lived commands, so they pick up config edits on the next hook invocation after the agent reloads its hook settings.
+- **Config changes require a restart.** Long-running runtimes read the defense config only at startup. After editing the config file (`config.yaml` for Hermes/Codex/Claude Code/CodeFuse CC, `openclaw.plugin.json` for OpenClaw) or changing settings in the WebUI, restart the agent. Codex, Claude Code, and CodeFuse CC hooks are short-lived commands, so they pick up config edits on the next hook invocation after the agent reloads its hook or plugin settings.
 - **`observe` logs, `enforce` blocks.** A defense in `observe` mode records detections but lets the action through; only `enforce` actually blocks. Roll out in `observe`, then promote high-confidence defenses to `enforce`.
 - **Hermes must load plugins to defend.** Use the gateway / interactive chat — `hermes -z` (oneshot) loads no plugins, so no defense runs. On startup the log should report `N high-risk tools wrapped` with N > 0, which is what arms tool-call blocking. Set `approvals.mode: off` to let AgentAegis own blocking.
-- **Codex/Claude Code hook coverage is lifecycle-bound.** The adapters block supported tool calls through `PreToolUse` (plus Codex `PermissionRequest`) and scan outputs through `PostToolUse`; they cannot undo side effects from tools that already completed before a post hook runs.
+- **Codex/Claude-compatible hook coverage is lifecycle-bound.** The Codex, Claude Code, and CodeFuse CC adapters block risky user dispatches during `UserPromptSubmit`, block supported tool calls through `PreToolUse` (plus Codex `PermissionRequest`), and scan outputs through `PostToolUse`. Runtime state is persisted under each adapter state directory so multi-step defenses such as loop, exfiltration, and script-provenance checks can span short-lived hook processes. They still cannot undo side effects from tools that already completed before a post hook runs, and assistant-output redaction is not fully wired for these adapters until the hosts expose a suitable output hook.
 
 ---
 
